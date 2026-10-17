@@ -57,7 +57,8 @@ export default async function StatsPage({ params }: PageProps<"/patotas/[id]/est
       // Frequência considera só os jogos depois que a pessoa entrou na patota.
       const possible = games.filter((g) => g.startsAt >= m.createdAt).length;
       const s = stats.get(m.id) ?? { played: 0, wins: 0, draws: 0, losses: 0, goals: 0 };
-      return { id: m.id, name: memberName(m), ...s, rate: attendanceRate(s.played, possible) };
+      // max: quem jogou antes de entrar oficialmente (ex.: como convidado) não passa de 100%.
+      return { id: m.id, name: memberName(m), ...s, rate: attendanceRate(s.played, Math.max(possible, s.played)) };
     })
     .sort((a, b) => b.played - a.played || b.goals - a.goals || a.name.localeCompare(b.name, "pt-BR"));
 

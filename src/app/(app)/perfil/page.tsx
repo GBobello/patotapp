@@ -5,6 +5,7 @@ import Typography from "@mui/material/Typography";
 import { cookies } from "next/headers";
 import { AccessibilityPreferences } from "@/components/accessibility-preferences";
 import { ActionButton } from "@/components/action-button";
+import { TextLink } from "@/components/links";
 import { DeleteAccountForm } from "@/components/delete-account-form";
 import { logoutEverywhere } from "../actions";
 import { readPreferences } from "@/lib/preferences";
@@ -68,6 +69,9 @@ export default async function ProfilePage() {
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: "error.main" }} component="section" aria-labelledby="excluir-conta">
         <Typography id="excluir-conta" variant="h6" component="h2" color="error" gutterBottom>
           Excluir conta
+        </Typography>
+        <Typography variant="body2" sx={{ mb: 1.5 }}>
+          Saiba como tratamos seus dados na <TextLink href="/privacidade">política de privacidade</TextLink>.
         </Typography>
         <DeleteAccountForm />
       </Paper>

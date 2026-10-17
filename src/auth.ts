@@ -22,8 +22,17 @@ const providers: Provider[] = [
 export const googleEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
 if (googleEnabled) providers.push(Google);
 
+// Ao entrar, o Auth.js apaga a sessão antiga do cookie. Se ela já não existe (ex.: "Sair de todos os
+// aparelhos" feito em outro celular), o adaptador padrão falha e o login quebra. deleteMany ignora isso.
+const adapter = {
+  ...PrismaAdapter(db),
+  deleteSession: async (sessionToken: string) => {
+    await db.session.deleteMany({ where: { sessionToken } });
+  },
+};
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(db),
+  adapter,
   providers,
   // RF02: sessão de 30 dias, renovada a cada dia de uso (sessão deslizante).
   // Quem abre o app pelo menos uma vez a cada 30 dias nunca precisa logar de novo.

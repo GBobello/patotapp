@@ -6,6 +6,7 @@ import NextLink from "next/link";
 import Badge from "@mui/material/Badge";
 import Box, { type BoxProps } from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
+import Link, { type LinkProps } from "@mui/material/Link";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import Button, { type ButtonProps } from "@mui/material/Button";
 import CardActionArea, { type CardActionAreaProps } from "@mui/material/CardActionArea";
@@ -42,4 +43,9 @@ export function NotificationsLink({ unread }: { unread: number }) {
       )}
     </IconButton>
   );
+}
+
+/** Link de texto com o roteador do Next (para usar em Server Components). */
+export function TextLink({ href, ...props }: LinkProps & { href: string }) {
+  return <Link component={NextLink} href={href} {...props} />;
 }

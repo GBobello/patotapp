@@ -98,7 +98,7 @@ export async function generateMonthlyCharges(patotaId: string, competence: strin
     return {
       ok: true,
       message: result.count
-        ? `${result.count} mensalidades de ${competenceLabel(competence)} geradas.`
+        ? `${result.count} ${result.count === 1 ? "mensalidade" : "mensalidades"} de ${competenceLabel(competence)} ${result.count === 1 ? "gerada" : "geradas"}.`
         : `As mensalidades de ${competenceLabel(competence)} já tinham sido geradas.`,
     };
   });
@@ -149,7 +149,7 @@ export async function generateGameCharges(gameId: string) {
     refresh(patota.id);
     return {
       ok: true,
-      message: result.count ? `${result.count} cobranças geradas.` : "As cobranças deste jogo já tinham sido geradas.",
+      message: result.count ? `${result.count} ${result.count === 1 ? "cobrança gerada" : "cobranças geradas"}.` : "As cobranças deste jogo já tinham sido geradas.",
     };
   });
 }

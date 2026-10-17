@@ -17,14 +17,14 @@ Legenda: ✅ implementado e testado · 🟡 parcial · ⬜ não implementado (pr
 | RF07 | Criar patota | ✅ | `/patotas/nova` |
 | RF08 | Várias patotas por organizador | ✅ | Painel lista todas |
 | RF09 | Convite por link/código | ✅ | Botão WhatsApp, copiar, gerar novo link |
-| RF10 | Aprovar pedidos de entrada | ⬜ | Hoje quem tem o link entra direto; o organizador pode remover |
+| RF10 | Aprovar pedidos de entrada | ✅ | Ajustes → "Aprovar quem entra pelo link"; pedidos em Integrantes |
 | RF11 | Papéis | ✅ | Organizador, co-organizador, jogador |
 | RF12 | Mensalista / diarista | ✅ | Integrantes → menu de ações |
 | RF13 | Convidado sem conta | ✅ | Integrantes → Adicionar convidado |
 | RF14 | Remover / sair | ✅ | Com regra do último organizador (RN02) |
 | RF15 | Busca e filtro de integrantes | ✅ | |
-| RF16 | Jogos recorrentes | ✅ | "Repetir toda semana" sugere a próxima data |
-| RF17 | Vagas, times e prazo por jogo | ✅ | |
+| RF16 | Jogos recorrentes | ✅ | O próximo jogo semanal é criado sozinho (pode desligar em Ajustes) |
+| RF17 | Vagas, times e prazo por jogo | ✅ | Jogo pode ser editado; menos vagas devolve à espera quem confirmou por último |
 | RF18 | Confirmar / talvez / não vou | ✅ | Em 1 toque, no painel e no jogo |
 | RF19 | Prioridade de mensalistas | ✅ | Ajustes → Regras dos jogos |
 | RF20 | Lista de espera automática | ✅ | Promoção por ordem de chegada, com trava contra corrida |
@@ -59,10 +59,10 @@ Legenda: ✅ implementado e testado · 🟡 parcial · ⬜ não implementado (pr
 | RF49 | Linha do tempo | ✅ | Aba Atividades |
 | RF50 | Painel com próximo jogo | ✅ | |
 | RF51 | Tarefas do jogo | ⬜ | |
-| RF52 | Placar e presença real | ⬜ | |
-| RF53 | Estatísticas | ⬜ | |
+| RF52 | Placar e presença real | ✅ | Depois do jogo; rateio/avulso passa a cobrar quem compareceu |
+| RF53 | Estatísticas | ✅ | Aba Estatísticas: jogos, frequência, gols, V/E/D, artilheiros |
 
-**Resumo:** 44 de 53 requisitos implementados e testados, 3 parciais e 6 não implementados. Todos os **Must** foram implementados; os pendentes são **Should/Could**.
+**Resumo:** 47 de 53 requisitos implementados e testados, 3 parciais e 3 não implementados (RF28, RF33, RF51). Todos os **Must** foram implementados; os pendentes são **Could**.
 
 ## Requisitos não funcionais
 
@@ -76,22 +76,22 @@ Legenda: ✅ implementado e testado · 🟡 parcial · ⬜ não implementado (pr
 | RNF13 (2 toques) | ✅ | Painel → "Vou" |
 | RNF15 (SUS ≥ 70) | ⬜ | Aplicar nas etapas 28–29 |
 | RNF17 (PWA) | ✅ | Manifest e ícones gerados; instalável |
-| RNF18–RNF20 (segurança/LGPD) | ✅ | Cookie HttpOnly; permissão checada no servidor em toda ação; exclusão de conta |
+| RNF18–RNF20 (segurança/LGPD) | ✅ | Cookie HttpOnly; permissão checada no servidor em toda ação; exclusão de conta; política de privacidade pública em `/privacidade` |
 | RNF21 (desempenho) | ⬜ | Medir com Lighthouse no deploy |
 | RNF22 (custo zero) | 🟡 | Stack compatível com Vercel + Neon gratuitos; deploy ainda não feito |
-| RNF23 (testes) | ✅ | 54 testes unitários (sorteio, financeiro, presença, datas) |
+| RNF23 (testes) | ✅ | 66 testes unitários (sorteio, financeiro, presença, datas, agenda, estatísticas) |
 | RNF24 (centavos) | ✅ | Todos os valores em centavos inteiros |
 
 ## Testes realizados
 
-- **Unitários (Vitest):** `npm test` — 54 testes, incluindo 150 elencos aleatórios no sorteio.
+- **Unitários (Vitest):** `npm test` — 66 testes, incluindo 150 elencos aleatórios no sorteio.
+- **Especificação (UML):** diagramas de casos de uso, classes, atividades e sequência em [04-uml.md](04-uml.md), validados com o parser do Mermaid.
 - **Fluxos no navegador:** login por link, convite, lista de espera com promoção, sorteio e publicação, cobranças (gerar, "já paguei", confirmar), despesas, CSV, mural, comentários, notificações, preferências e exclusão de conta.
 - **Acessibilidade:** axe-core (WCAG 2.1 A/AA) nos temas claro e escuro.
 
 ## Sugestões para as próximas versões
 
 1. Notificações push (Web Push) e por e-mail (RF48).
-2. Aprovação de entrada na patota (RF10).
-3. Regras "juntos/separados" no sorteio (RF33) e cores de colete (RF36).
-4. Placar, presença real e estatísticas (RF52, RF53).
-5. Deploy na Vercel + Neon e medição com Lighthouse (RNF21, RNF22).
+2. Regras "juntos/separados" no sorteio (RF33) e cores de colete (RF36).
+3. Tarefas do jogo (RF51) e avaliação entre pares (RF28).
+4. Deploy na Vercel + Neon e medição com Lighthouse (RNF21, RNF22).

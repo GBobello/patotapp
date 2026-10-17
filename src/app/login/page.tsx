@@ -11,6 +11,7 @@ import Typography from "@mui/material/Typography";
 import SportsSoccerIcon from "@mui/icons-material/SportsSoccer";
 import { auth, googleEnabled } from "@/auth";
 import { safeCallbackPath } from "@/lib/forms";
+import { TextLink } from "@/components/links";
 import { loginWithGoogle } from "./actions";
 import { EmailLoginForm } from "./email-login-form";
 
@@ -62,6 +63,9 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center" }}>
             Você continua conectado por 30 dias neste aparelho.
+          </Typography>
+          <Typography variant="body2" sx={{ textAlign: "center" }}>
+            <TextLink href="/privacidade">Política de privacidade</TextLink>
           </Typography>
         </Stack>
       </Paper>
