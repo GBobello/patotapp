@@ -60,7 +60,18 @@ model Patota {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Padrões do jogo recorrente (RF16): usados para sugerir o próximo jogo.
+  /// Dia da semana: 0 = domingo … 6 = sábado.
+  defaultWeekday       Int?
+  /// Horário no formato HH:MM (horário de Brasília).
+  defaultTime          String?
+  defaultMaxPlayers    Int     @default(14)
+  defaultTeamsCount    Int     @default(2)
+  /// Quantas horas antes do jogo a confirmação fecha.
+  defaultDeadlineHours Int     @default(3)
+
   memberships Membership[]
+  games       Game[]
 }
 
 /// Vínculo de uma pessoa com uma patota. Papel e tipo são por patota.
@@ -72,11 +83,59 @@ model Membership {
   type      MemberType @default(MENSALISTA)
   createdAt DateTime   @default(now())
 
-  patota Patota @relation(fields: [patotaId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patota      Patota       @relation(fields: [patotaId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attendances Attendance[]
 
   @@unique([patotaId, userId])
   @@index([userId])
+}
+
+// ---- Jogos e presença (ciclo 3) ----
+
+enum GameStatus {
+  SCHEDULED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  CONFIRMED
+  MAYBE
+  DECLINED
+  WAITLIST
+}
+
+model Game {
+  id                   String     @id @default(cuid())
+  patotaId             String
+  startsAt             DateTime
+  location             String?
+  maxPlayers           Int
+  teamsCount           Int        @default(2)
+  /// Depois deste momento só organizadores alteram a lista (RN03).
+  confirmationDeadline DateTime
+  status               GameStatus @default(SCHEDULED)
+  notes                String?
+  createdAt            DateTime   @default(now())
+
+  patota      Patota       @relation(fields: [patotaId], references: [id], onDelete: Cascade)
+  attendances Attendance[]
+
+  @@index([patotaId, startsAt])
+}
+
+model Attendance {
+  id              String           @id @default(cuid())
+  gameId          String
+  membershipId    String
+  status          AttendanceStatus
+  /// Momento da última mudança de status — define a ordem da lista de espera.
+  statusChangedAt DateTime         @default(now())
+
+  game       Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, membershipId])
 }
 
 // ---- Modelos do Auth.js (@auth/prisma-adapter) ----

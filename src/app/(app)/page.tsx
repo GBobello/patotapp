@@ -8,10 +8,12 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
 import GroupsIcon from "@mui/icons-material/Groups";
+import { GameCard } from "@/components/game-card";
 import { JoinByCodeForm } from "@/components/join-by-code-form";
 import { LinkButton, LinkCardActionArea } from "@/components/links";
 import { ROLE_LABELS } from "@/domain/roles";
 import { db } from "@/server/db";
+import { attendanceSummarySelect, summarizeGame, upcomingWhere } from "@/server/games";
 import { requireUser } from "@/server/session";
 
 export const metadata: Metadata = { title: "Painel" };
@@ -26,6 +28,20 @@ export default async function DashboardPage() {
     include: { patota: { include: { _count: { select: { memberships: true } } } } },
     orderBy: { patota: { name: "asc" } },
   });
+
+  // RF50: o próximo jogo de cada patota, com a minha situação.
+  const upcoming = await db.game.findMany({
+    where: { patotaId: { in: memberships.map((m) => m.patotaId) }, status: "SCHEDULED", ...upcomingWhere() },
+    include: attendanceSummarySelect,
+    orderBy: { startsAt: "asc" },
+  });
+  const seen = new Set<string>();
+  const nextGames = upcoming
+    .filter((g) => !seen.has(g.patotaId) && seen.add(g.patotaId))
+    .map((g) => {
+      const m = memberships.find((x) => x.patotaId === g.patotaId)!;
+      return summarizeGame(g, m.id, m.patota.name);
+    });
 
   return (
     <Stack spacing={3}>
@@ -44,6 +60,17 @@ export default async function DashboardPage() {
         >
           Complete seu perfil com nome e posição para entrar no sorteio dos times.
         </Alert>
+      )}
+
+      {nextGames.length > 0 && (
+        <Stack spacing={2} component="section" aria-labelledby="proximos-jogos">
+          <Typography id="proximos-jogos" variant="h5" component="h2">
+            Próximos jogos
+          </Typography>
+          {nextGames.map((g) => (
+            <GameCard key={g.id} game={g} />
+          ))}
+        </Stack>
       )}
 
       <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
