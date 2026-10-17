@@ -45,3 +45,18 @@ export async function requireOrganizer(patotaId: string) {
   return ctx;
 }
 
+
+/**
+ * RF28: notas dadas pelos colegas, agrupadas por avaliado (só de integrantes ativos).
+ * Retorna mapa vazio se a avaliação entre pares estiver desligada.
+ */
+export async function peerRatingsByMember(patotaId: string, enabled: boolean) {
+  const map = new Map<string, number[]>();
+  if (!enabled) return map;
+  const ratings = await db.peerRating.findMany({
+    where: { ratee: { patotaId, status: "ACTIVE" }, rater: { status: "ACTIVE" } },
+    select: { rateeId: true, rating: true },
+  });
+  for (const r of ratings) map.set(r.rateeId, [...(map.get(r.rateeId) ?? []), r.rating]);
+  return map;
+}

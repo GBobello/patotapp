@@ -4,10 +4,10 @@ import { ActionButton } from "@/components/action-button";
 import { AddGuestDialog } from "@/components/add-guest-dialog";
 import { MembersList, type MemberRow } from "@/components/members-list";
 import { PendingRequests } from "@/components/pending-requests";
-import { memberImage, memberName, memberPositions } from "@/domain/members";
+import { average, memberImage, memberName, memberPositions } from "@/domain/members";
 import { canManage, isOrganizer } from "@/domain/roles";
 import { db } from "@/server/db";
-import { requireMember } from "@/server/patotas";
+import { peerRatingsByMember, requireMember } from "@/server/patotas";
 import { leavePatota } from "../actions";
 
 export const metadata: Metadata = { title: "Integrantes" };
@@ -16,7 +16,7 @@ const ROLE_ORDER = { ORGANIZER: 0, CO_ORGANIZER: 1, PLAYER: 2 } as const;
 
 export default async function MembersPage({ params }: PageProps<"/patotas/[id]/membros">) {
   const { id } = await params;
-  const { membership: me } = await requireMember(id);
+  const { membership: me, patota } = await requireMember(id);
   const manager = canManage(me.role);
 
   const all = await db.membership.findMany({
@@ -25,6 +25,7 @@ export default async function MembersPage({ params }: PageProps<"/patotas/[id]/m
     orderBy: { createdAt: "asc" },
   });
   const memberships = all.filter((m) => m.status === "ACTIVE");
+  const peers = manager ? await peerRatingsByMember(id, patota.peerRatingEnabled) : new Map<string, number[]>();
   const pending = manager ? all.filter((m) => m.status === "PENDING") : [];
 
   const rows: MemberRow[] = memberships
@@ -39,6 +40,8 @@ export default async function MembersPage({ params }: PageProps<"/patotas/[id]/m
       isGuest: !m.userId,
       // RF27: a nota não sai do servidor para quem não é organizador.
       rating: manager ? m.rating : undefined,
+      peerAvg: manager ? average(peers.get(m.id) ?? []) : undefined,
+      peerVotes: manager ? (peers.get(m.id)?.length ?? 0) : undefined,
     }))
     .sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || a.name.localeCompare(b.name, "pt-BR"));
 

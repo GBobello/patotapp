@@ -42,6 +42,9 @@ export type MemberRow = {
   isGuest: boolean;
   /** Só enviado para organizadores (RF27). */
   rating?: number;
+  /** RF28: média dada pela galera e quantos votos (só para organizadores). */
+  peerAvg?: number | null;
+  peerVotes?: number;
 };
 
 type Props = {
@@ -237,6 +240,7 @@ function MemberRating({ patotaId, member }: { patotaId: string; member: MemberRo
       />
       <Typography variant="caption" color="text.secondary">
         {RATING_LABELS[value]}
+        {member.peerVotes ? ` · galera: ${String(member.peerAvg).replace(".", ",")} (${member.peerVotes})` : ""}
       </Typography>
     </Stack>
   );

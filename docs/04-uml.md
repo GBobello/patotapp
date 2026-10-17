@@ -93,6 +93,8 @@ classDiagram
     defaultDeadlineHours
     diaristaWindowHours
     requireApproval: bool
+    peerRatingEnabled: bool
+    teamNames: String[]
     autoCreateGames: bool
     billingMode: BillingMode
     monthlyFeeCents
@@ -159,6 +161,15 @@ classDiagram
   class GameComment {
     text
   }
+  class DrawRule {
+    kind: DrawRuleKind
+  }
+  class GameTask {
+    title
+  }
+  class PeerRating {
+    rating: 1..5
+  }
   class Activity {
     message
     href
@@ -178,9 +189,14 @@ classDiagram
   Announcement "1" *-- "0..*" AnnouncementReaction
   Game "1" *-- "0..*" GameComment
   Patota "1" *-- "0..*" Activity
+  Patota "1" *-- "0..*" DrawRule
+  DrawRule "0..*" --> "2" Membership : par
+  Game "1" *-- "0..*" GameTask
+  GameTask "0..*" --> "0..1" Membership : responsável
+  Membership "1" --> "0..*" PeerRating : avalia
 ```
 
-Enumerações: `Position` (GOL, ZAG, LAT, MEI, ATA) · `Role` (ORGANIZER, CO_ORGANIZER, PLAYER) · `MemberType` (MENSALISTA, DIARISTA) · `MembershipStatus` (ACTIVE, PENDING) · `AttendanceStatus` (CONFIRMED, MAYBE, DECLINED, WAITLIST) · `GameStatus` (SCHEDULED, CANCELLED) · `BillingMode` (FIXED_MONTHLY, SPLIT_PER_GAME) · `ChargeStatus` (PENDING, REPORTED, PAID, WAIVED) · `Audience` (ALL, MANAGERS).
+Enumerações: `Position` (GOL, ZAG, LAT, MEI, ATA) · `Role` (ORGANIZER, CO_ORGANIZER, PLAYER) · `MemberType` (MENSALISTA, DIARISTA) · `MembershipStatus` (ACTIVE, PENDING) · `AttendanceStatus` (CONFIRMED, MAYBE, DECLINED, WAITLIST) · `GameStatus` (SCHEDULED, CANCELLED) · `BillingMode` (FIXED_MONTHLY, SPLIT_PER_GAME) · `ChargeStatus` (PENDING, REPORTED, PAID, WAIVED) · `Audience` (ALL, MANAGERS) · `DrawRuleKind` (TOGETHER, APART).
 
 Valores em dinheiro são inteiros em centavos (RNF24).
 

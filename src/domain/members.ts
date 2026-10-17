@@ -42,3 +42,21 @@ export const RATING_LABELS: Record<number, string> = {
   4: "Muito bom",
   5: "Craque",
 };
+
+/** Mínimo de avaliações da galera para a média entrar na nota do sorteio (RF28). */
+export const MIN_PEER_VOTES = 3;
+
+/**
+ * RF28: nota usada no sorteio. Com pelo menos MIN_PEER_VOTES avaliações dos colegas,
+ * vale a média entre a nota do organizador e a média da galera (uma casa decimal);
+ * com menos votos, vale só a nota do organizador (poucos votos distorcem).
+ */
+export function effectiveRating(organizerRating: number, peerRatings: number[]): number {
+  if (peerRatings.length < MIN_PEER_VOTES) return organizerRating;
+  const peerAvg = peerRatings.reduce((s, r) => s + r, 0) / peerRatings.length;
+  return Math.round(((organizerRating + peerAvg) / 2) * 10) / 10;
+}
+
+export function average(values: number[]): number | null {
+  return values.length ? Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10 : null;
+}

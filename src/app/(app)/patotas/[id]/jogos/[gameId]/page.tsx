@@ -10,17 +10,19 @@ import { AttendanceButtons } from "@/components/attendance-buttons";
 import { PlayerList, type PlayerItem } from "@/components/player-list";
 import { GameComments } from "@/components/game-comments";
 import { GameResultForm } from "@/components/game-result-form";
+import { GameTasks } from "@/components/game-tasks";
 import { LinkButton } from "@/components/links";
 import { CopyButton, WhatsAppButton } from "@/components/share-buttons";
 import { TeamsSection, type TeamMemberInfo } from "@/components/teams-section";
 import type { AttendanceStatus } from "@/domain/attendance";
 import { formatGameDate, formatGameDateLong } from "@/domain/dates";
 import { canManage } from "@/domain/roles";
-import { memberImage, memberName, memberPositions } from "@/domain/members";
+import { effectiveRating, memberImage, memberName, memberPositions } from "@/domain/members";
 import { gameListMessage } from "@/domain/share";
 import { parseStoredDraw, teamName } from "@/domain/teams";
 import { db } from "@/server/db";
-import { requireGame, syncGameSpots } from "@/server/games";
+import { requireGame, syncGameSpots, upcomingWhere } from "@/server/games";
+import { peerRatingsByMember } from "@/server/patotas";
 import { getOrigin } from "@/server/url";
 import { generateGameCharges } from "../../financeiro/actions";
 import { cancelGame, saveGameResult } from "../actions";
@@ -39,7 +41,7 @@ export default async function GamePage({ params, searchParams }: PageProps<"/pat
   const diaristaWindowOpen = !game.diaristasOpenAt || game.diaristasOpenAt <= new Date();
   if (game.status === "SCHEDULED" && game.diaristasOpenAt) await syncGameSpots(gameId);
 
-  const [attendances, members, comments] = await Promise.all([
+  const [attendances, members, comments, tasks] = await Promise.all([
     db.attendance.findMany({
       where: { gameId },
       include: { membership: { include: { user: true } } },
@@ -49,6 +51,11 @@ export default async function GamePage({ params, searchParams }: PageProps<"/pat
     db.gameComment.findMany({
       where: { gameId },
       include: { author: { include: { user: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.gameTask.findMany({
+      where: { gameId },
+      include: { assignee: { include: { user: true } } },
       orderBy: { createdAt: "asc" },
     }),
   ]);
@@ -79,8 +86,12 @@ export default async function GamePage({ params, searchParams }: PageProps<"/pat
   const scorers = attendances.filter((a) => a.attended && a.goals > 0).sort((a, b) => b.goals - a.goals);
   const closed = game.confirmationDeadline <= new Date();
   const confirmed = items("CONFIRMED");
+  const peers = manager ? await peerRatingsByMember(id, patota.peerRatingEnabled) : new Map<string, number[]>();
   const teamMembers = new Map<string, TeamMemberInfo>(
-    members.map((m) => [m.id, { name: memberName(m), rating: m.rating, primary: memberPositions(m).primary }]),
+    members.map((m) => [
+      m.id,
+      { name: memberName(m), rating: effectiveRating(m.rating, peers.get(m.id) ?? []), primary: memberPositions(m).primary },
+    ]),
   );
 
   const shareText = gameListMessage({
@@ -140,6 +151,20 @@ export default async function GamePage({ params, searchParams }: PageProps<"/pat
             />
           </Stack>
         </Paper>
+      )}
+
+      {!cancelled && (
+        <GameTasks
+          gameId={gameId}
+          manager={manager}
+          disabled={game.startsAt < upcomingWhere().startsAt.gte}
+          tasks={tasks.map((t) => ({
+            id: t.id,
+            title: t.title,
+            assignee: t.assignee ? memberName(t.assignee) : null,
+            mine: t.assigneeId === me.id,
+          }))}
+        />
       )}
 
       {!cancelled && (

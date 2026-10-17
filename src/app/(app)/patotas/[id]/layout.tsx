@@ -17,6 +17,7 @@ export default async function PatotaLayout({ children, params }: LayoutProps<"/p
     { label: "Mural", href: `${base}/mural` },
     { label: "Financeiro", href: `${base}/financeiro` },
     { label: "Estatísticas", href: `${base}/estatisticas` },
+    ...(patota.peerRatingEnabled ? [{ label: "Avaliar", href: `${base}/avaliar` }] : []),
     { label: "Atividades", href: `${base}/atividades` },
   ];
   if (canManage(membership.role)) tabs.push({ label: "Ajustes", href: `${base}/configuracoes` });

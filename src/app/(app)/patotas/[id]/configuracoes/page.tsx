@@ -4,6 +4,7 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { ApprovalSwitch } from "@/components/approval-switch";
+import { SettingSwitch } from "@/components/setting-switch";
 import { DrawRulesForm, TeamNamesForm } from "@/components/team-settings";
 import { memberName } from "@/domain/members";
 import { BillingSettingsForm } from "@/components/billing-settings-form";
@@ -15,7 +16,7 @@ import { canManage, isOrganizer } from "@/domain/roles";
 import { db } from "@/server/db";
 import { requireMember } from "@/server/patotas";
 import { updateBillingSettings } from "../financeiro/actions";
-import { deletePatota, updateGameRules, updatePatota } from "../actions";
+import { deletePatota, setPeerRatingEnabled, updateGameRules, updatePatota } from "../actions";
 
 export const metadata: Metadata = { title: "Ajustes da patota" };
 
@@ -97,6 +98,18 @@ export default async function PatotaSettingsPage({ params }: PageProps<"/patotas
           Entrada na patota
         </Typography>
         <ApprovalSwitch patotaId={id} initial={patota.requireApproval} />
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }} component="section" aria-labelledby="avaliacao-pares">
+        <Typography id="avaliacao-pares" variant="h6" component="h2" gutterBottom>
+          Avaliação entre jogadores
+        </Typography>
+        <SettingSwitch
+          action={setPeerRatingEnabled.bind(null, id)}
+          initial={patota.peerRatingEnabled}
+          label="Jogadores avaliam uns aos outros"
+          description="Cada um dá notas secretas aos colegas na aba Avaliar. Com pelo menos 3 avaliações, a média da galera entra na nota do sorteio junto com a sua."
+        />
       </Paper>
 
       <InviteCard patota={patota} />

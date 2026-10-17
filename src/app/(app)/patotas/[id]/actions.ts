@@ -303,3 +303,38 @@ export async function deleteDrawRule(patotaId: string, ruleId: string) {
     return { ok: true, message: "Regra removida." };
   });
 }
+
+// ---------- Avaliação entre pares (RF28) ----------
+
+export async function setPeerRatingEnabled(patotaId: string, enabled: boolean) {
+  return guarded(async () => {
+    await requireManager(patotaId);
+    await db.patota.update({ where: { id: patotaId }, data: { peerRatingEnabled: enabled } });
+    refresh(patotaId);
+    return {
+      ok: true,
+      message: enabled
+        ? "Avaliação entre jogadores ligada. A aba Avaliar aparece para todos."
+        : "Avaliação entre jogadores desligada. O sorteio volta a usar só a sua nota.",
+    };
+  });
+}
+
+/** Um integrante avalia outro (secreto: ninguém vê quem deu qual nota). */
+export async function ratePeer(patotaId: string, rateeId: string, rating: number) {
+  return guarded(async () => {
+    const { membership, patota } = await requireMember(patotaId);
+    if (!patota.peerRatingEnabled) return { error: "A avaliação entre jogadores está desligada nesta patota." };
+    if (rateeId === membership.id) return { error: "Você não pode avaliar a si mesmo." };
+    const value = z.number().int().min(1).max(5).parse(rating);
+    await findMember(patotaId, rateeId);
+
+    await db.peerRating.upsert({
+      where: { raterId_rateeId: { raterId: membership.id, rateeId } },
+      create: { raterId: membership.id, rateeId, rating: value },
+      update: { rating: value },
+    });
+    revalidatePath(`/patotas/${patotaId}/avaliar`);
+    return { ok: true, message: "Avaliação salva." };
+  });
+}

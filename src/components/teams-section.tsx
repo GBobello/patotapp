@@ -33,6 +33,9 @@ type Props = {
   teamNames?: string[];
 };
 
+/** Notas podem ter uma casa decimal quando a avaliação da galera entra (RF28). */
+const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1).replace(".", ","));
+
 function balanceLabel(spread: number) {
   if (spread <= 1) return { text: "Times equilibrados", color: "success" as const };
   if (spread <= 3) return { text: "Pequena diferença", color: "warning" as const };
@@ -109,7 +112,7 @@ export function TeamsSection({
 
       {manager && draw && (
         <Alert severity={balance.color} icon={false}>
-          <strong>{balance.text}.</strong> Diferença entre a maior e a menor soma de notas: {spreadOf(teams)}{" "}
+          <strong>{balance.text}.</strong> Diferença entre a maior e a menor soma de notas: {fmt(spreadOf(teams))}{" "}
           {spreadOf(teams) === 1 ? "ponto" : "pontos"}.
         </Alert>
       )}
@@ -140,7 +143,7 @@ export function TeamsSection({
                     )}
                     {manager && (
                       <Typography variant="body2" color="text.secondary">
-                        Soma {team.total} · média {(team.total / Math.max(1, team.players.length)).toFixed(1)}
+                        Soma {fmt(team.total)} · média {(team.total / Math.max(1, team.players.length)).toFixed(1)}
                       </Typography>
                     )}
                   </Stack>
@@ -167,7 +170,7 @@ export function TeamsSection({
                             [
                               p.role ? POSITION_LABELS[p.role] : "Linha",
                               p.improvised ? "improvisado" : null,
-                              manager ? `nota ${p.rating}` : null,
+                              manager ? `nota ${fmt(p.rating)}` : null,
                             ]
                               .filter(Boolean)
                               .join(" · ")

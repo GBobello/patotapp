@@ -7,7 +7,7 @@ import { RESPONSES, checkCanRespond, initialStatus } from "@/domain/attendance";
 import { formatGameDate, fromLocalDateTime, toLocalParts } from "@/domain/dates";
 import { DrawError, drawTeams } from "@/domain/draw";
 import { demotions, gameDeadlines } from "@/domain/games";
-import { memberName, memberPositions } from "@/domain/members";
+import { effectiveRating, memberName, memberPositions } from "@/domain/members";
 import { canManage } from "@/domain/roles";
 import { type StoredDraw, moveMember, parseStoredDraw, teamName } from "@/domain/teams";
 import { type ActionResult, emptyToNull, fieldErrorsFrom, formValues } from "@/lib/forms";
@@ -16,7 +16,7 @@ import { db } from "@/server/db";
 import { requireGame, withGameLock } from "@/server/games";
 import { logActivity } from "@/server/activity";
 import { guarded } from "@/server/guard";
-import { ForbiddenError, requireManager, requireMember } from "@/server/patotas";
+import { ForbiddenError, peerRatingsByMember, requireManager, requireMember } from "@/server/patotas";
 
 const HOUR = 60 * 60 * 1000;
 
@@ -293,7 +293,7 @@ export async function cancelGame(gameId: string) {
 /** RF29–RF32: sorteia os times entre os confirmados. O resultado fica oculto até ser publicado. */
 export async function drawGameTeams(gameId: string) {
   return guarded(async () => {
-    const { game } = await requireGame(gameId);
+    const { game, patota } = await requireGame(gameId);
     await requireManager(game.patotaId);
     if (game.status === "CANCELLED") return { error: "Este jogo foi cancelado." };
 
@@ -304,6 +304,7 @@ export async function drawGameTeams(gameId: string) {
       }),
       db.drawRule.findMany({ where: { patotaId: game.patotaId } }),
     ]);
+    const peers = await peerRatingsByMember(game.patotaId, patota.peerRatingEnabled);
     const pairs = (kind: "TOGETHER" | "APART") =>
       rules.filter((r) => r.kind === kind).map((r) => [r.firstId, r.secondId] as [string, string]);
 
@@ -311,7 +312,8 @@ export async function drawGameTeams(gameId: string) {
       const result = drawTeams(
         confirmed.map(({ membership: m }) => ({
           id: m.id,
-          rating: m.rating,
+          // RF28: com avaliação entre pares, mistura a nota do organizador com a da galera.
+          rating: effectiveRating(m.rating, peers.get(m.id) ?? []),
           ...memberPositions(m),
         })),
         { teamsCount: game.teamsCount, together: pairs("TOGETHER"), apart: pairs("APART") },
@@ -464,5 +466,78 @@ export async function saveGameResult(gameId: string, _prev: ActionResult, formDa
     });
     revalidatePath(`/patotas/${game.patotaId}`, "layout");
     return { ok: true, message: "Resultado salvo. As cobranças do jogo agora usam quem compareceu." };
+  });
+}
+
+// ---------- Tarefas do jogo (RF51) ----------
+
+const taskSchema = z.string().trim().min(2, "Descreva a tarefa.").max(60, "Use no máximo 60 caracteres.");
+
+/** Qualquer integrante cria uma tarefa (ex.: "Levar bola"); quem cria pode já assumir. */
+export async function addGameTask(gameId: string, title: string, assignToMe = false): Promise<ActionResult> {
+  return guarded(async () => {
+    const { game, membership } = await requireGame(gameId);
+    if (game.status === "CANCELLED") return { error: "Este jogo foi cancelado." };
+    const parsed = taskSchema.safeParse(title);
+    if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+    const exists = await db.gameTask.findFirst({ where: { gameId, title: { equals: parsed.data, mode: "insensitive" } } });
+    if (exists) return { error: "Essa tarefa já está na lista." };
+
+    await db.gameTask.create({
+      data: { gameId, title: parsed.data, assigneeId: assignToMe ? membership.id : null },
+    });
+    revalidatePath(`/patotas/${game.patotaId}/jogos/${gameId}`);
+    return { ok: true, message: assignToMe ? `Combinado: "${parsed.data}" é com você.` : "Tarefa adicionada." };
+  });
+}
+
+async function loadTask(taskId: string) {
+  const task = await db.gameTask.findUnique({ where: { id: taskId }, include: { game: true } });
+  if (!task) throw new ForbiddenError("Tarefa não encontrada.");
+  const ctx = await requireMember(task.game.patotaId);
+  return { task, ...ctx };
+}
+
+/** Assumir uma tarefa livre. */
+export async function takeGameTask(taskId: string): Promise<ActionResult> {
+  return guarded(async () => {
+    const { task, membership, user } = await loadTask(taskId);
+    // updateMany com assigneeId null evita que duas pessoas peguem a mesma tarefa ao mesmo tempo.
+    const { count } = await db.gameTask.updateMany({
+      where: { id: taskId, assigneeId: null },
+      data: { assigneeId: membership.id },
+    });
+    if (!count) return { error: "Alguém já pegou essa tarefa." };
+
+    await logActivity({
+      patotaId: task.game.patotaId,
+      actorId: membership.id,
+      message: `${memberName({ ...membership, user })} vai cuidar de "${task.title}" no jogo de ${formatGameDate(task.game.startsAt)}`,
+      href: `/patotas/${task.game.patotaId}/jogos/${task.gameId}`,
+    });
+    revalidatePath(`/patotas/${task.game.patotaId}/jogos/${task.gameId}`);
+    return { ok: true, message: `Valeu! "${task.title}" é com você.` };
+  });
+}
+
+/** Largar a tarefa (a própria; organizadores podem liberar a de qualquer um). */
+export async function releaseGameTask(taskId: string): Promise<ActionResult> {
+  return guarded(async () => {
+    const { task, membership } = await loadTask(taskId);
+    if (task.assigneeId !== membership.id && !canManage(membership.role)) throw new ForbiddenError();
+    await db.gameTask.update({ where: { id: taskId }, data: { assigneeId: null } });
+    revalidatePath(`/patotas/${task.game.patotaId}/jogos/${task.gameId}`);
+    return { ok: true, message: `"${task.title}" está livre de novo.` };
+  });
+}
+
+export async function deleteGameTask(taskId: string): Promise<ActionResult> {
+  return guarded(async () => {
+    const { task, membership } = await loadTask(taskId);
+    if (!canManage(membership.role)) throw new ForbiddenError();
+    await db.gameTask.delete({ where: { id: taskId } });
+    revalidatePath(`/patotas/${task.game.patotaId}/jogos/${task.gameId}`);
+    return { ok: true, message: "Tarefa removida." };
   });
 }
