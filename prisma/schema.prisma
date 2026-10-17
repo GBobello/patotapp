@@ -31,12 +31,15 @@ model User {
   secondaryPositions  Position[]
   /// Até quando o usuário já viu as notificações (RF48).
   notificationsSeenAt DateTime?
+  /// Lembrete por e-mail antes do prazo de confirmação (RF48). Pode ser desligado no perfil.
+  emailReminders      Boolean    @default(true)
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
 
-  accounts    Account[]
-  sessions    Session[]
-  memberships Membership[]
+  accounts          Account[]
+  sessions          Session[]
+  memberships       Membership[]
+  pushSubscriptions PushSubscription[]
 }
 
 // ---- Patotas (ciclo 2) ----
@@ -220,6 +223,8 @@ model Game {
   teamScores           Int[]      @default([])
   /// Quando o organizador registrou presença real e placar. Depois disso o rateio usa quem foi.
   resultSavedAt        DateTime?
+  /// Quando o lembrete por e-mail do prazo de confirmação foi enviado (RF48).
+  reminderSentAt       DateTime?
   createdAt            DateTime   @default(now())
 
   patota      Patota        @relation(fields: [patotaId], references: [id], onDelete: Cascade)
@@ -352,4 +357,18 @@ model Activity {
   actor  Membership? @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([patotaId, createdAt])
+}
+
+/// Inscrição de um aparelho para notificações push do PWA (RF48). Uma por navegador/aparelho.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

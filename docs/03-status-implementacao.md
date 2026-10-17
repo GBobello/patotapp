@@ -55,14 +55,14 @@ Legenda: ✅ implementado e testado · 🟡 parcial · ⬜ não implementado (pr
 | RF45 | Exportar relatório | ✅ | CSV que abre no Excel |
 | RF46 | Mural de avisos | ✅ | Fixar, excluir, reações |
 | RF47 | Comentários no jogo | ✅ | |
-| RF48 | Notificações | 🟡 | No app (sino com contador). Push e e-mail ainda não |
+| RF48 | Notificações | ✅ | No app (sino com contador); push no PWA, ativado por aparelho em Meu perfil, para jogo novo, cancelamento, times publicados, promoção da lista de espera (só para quem foi promovido) e pagamentos (só organizadores), nunca para quem fez a ação; lembrete por e-mail até 24 h antes do prazo para quem não respondeu ou marcou talvez (`/api/cron/lembretes`, desligável no perfil) |
 | RF49 | Linha do tempo | ✅ | Aba Atividades |
 | RF50 | Painel com próximo jogo | ✅ | |
 | RF51 | Tarefas do jogo | ⬜ | |
 | RF52 | Placar e presença real | ✅ | Depois do jogo; rateio/avulso passa a cobrar quem compareceu |
 | RF53 | Estatísticas | ✅ | Aba Estatísticas: jogos, frequência, gols, V/E/D, artilheiros |
 
-**Resumo:** 47 de 53 requisitos implementados e testados, 3 parciais e 3 não implementados (RF28, RF33, RF51). Todos os **Must** foram implementados; os pendentes são **Could**.
+**Resumo:** 48 de 53 requisitos implementados e testados, 2 parciais (RF32, RF36) e 3 não implementados (RF28, RF33, RF51). Todos os **Must** foram implementados; os pendentes são **Could**.
 
 ## Requisitos não funcionais
 
@@ -79,19 +79,19 @@ Legenda: ✅ implementado e testado · 🟡 parcial · ⬜ não implementado (pr
 | RNF18–RNF20 (segurança/LGPD) | ✅ | Cookie HttpOnly; permissão checada no servidor em toda ação; exclusão de conta; política de privacidade pública em `/privacidade` |
 | RNF21 (desempenho) | ⬜ | Medir com Lighthouse no deploy |
 | RNF22 (custo zero) | 🟡 | Stack compatível com Vercel + Neon gratuitos; deploy ainda não feito |
-| RNF23 (testes) | ✅ | 66 testes unitários (sorteio, financeiro, presença, datas, agenda, estatísticas) |
+| RNF23 (testes) | ✅ | 77 testes unitários (sorteio, financeiro, presença, datas, agenda, estatísticas, notificações) |
 | RNF24 (centavos) | ✅ | Todos os valores em centavos inteiros |
 
 ## Testes realizados
 
-- **Unitários (Vitest):** `npm test` — 66 testes, incluindo 150 elencos aleatórios no sorteio.
+- **Unitários (Vitest):** `npm test` — 77 testes, incluindo 150 elencos aleatórios no sorteio.
 - **Especificação (UML):** diagramas de casos de uso, classes, atividades e sequência em [04-uml.md](04-uml.md), validados com o parser do Mermaid.
-- **Fluxos no navegador:** login por link, convite, lista de espera com promoção, sorteio e publicação, cobranças (gerar, "já paguei", confirmar), despesas, CSV, mural, comentários, notificações, preferências e exclusão de conta.
+- **Fluxos no navegador:** login por link, convite e aprovação de entrada, lista de espera com promoção, edição de jogo (menos e mais vagas), criação automática do próximo jogo, sorteio e publicação, resultado do jogo e estatísticas, cobranças pela presença real, despesas, CSV, mural, comentários, notificações (push e lembrete por e-mail), preferências e exclusão de conta.
 - **Acessibilidade:** axe-core (WCAG 2.1 A/AA) nos temas claro e escuro.
 
 ## Sugestões para as próximas versões
 
-1. Notificações push (Web Push) e por e-mail (RF48).
-2. Regras "juntos/separados" no sorteio (RF33) e cores de colete (RF36).
-3. Tarefas do jogo (RF51) e avaliação entre pares (RF28).
-4. Deploy na Vercel + Neon e medição com Lighthouse (RNF21, RNF22).
+1. Regras "juntos/separados" no sorteio (RF33) e cores de colete (RF36).
+2. Tarefas do jogo (RF51) e avaliação entre pares (RF28).
+3. Deploy na Vercel + Neon e medição com Lighthouse (RNF21, RNF22), com agendador horário para `/api/cron/lembretes`.
+4. Aviso de cobrança vencendo (RF48 cita como exemplo; hoje o financeiro avisa só organizadores).

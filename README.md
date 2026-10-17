@@ -29,6 +29,10 @@ npm run dev                 # http://localhost:3000
 
 **Demonstração:** depois do `db:seed`, entre com `organizador@patotapp.test` para ver a patota "Futebol de Quinta (demo)" com jogo, confirmados, cobrança e mural. Ótimo para as validações com a patota.
 
+**Notificações push (opcional, RF48):** gere as chaves com `npx web-push generate-vapid-keys` e preencha `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY`. Cada pessoa ativa o push no próprio aparelho em **Meu perfil → Notificações** (no iPhone, só com o app adicionado à Tela de Início). O service worker (`public/sw.js`) só recebe push e abre o link ao tocar na notificação.
+
+**Lembrete por e-mail (opcional, RF48):** defina `CRON_SECRET` e faça um agendador chamar `GET /api/cron/lembretes` a cada hora com o cabeçalho `Authorization: Bearer <CRON_SECRET>`. Quem ainda não respondeu (ou marcou talvez) recebe um e-mail até 24 horas antes do prazo de confirmação, uma vez por jogo. Sem `AUTH_RESEND_KEY`, o e-mail aparece no terminal.
+
 **Login com Google (opcional):** preencha `AUTH_GOOGLE_ID` e `AUTH_GOOGLE_SECRET`. O botão só aparece quando essas variáveis estão definidas.
 
 ## Scripts
@@ -73,6 +77,7 @@ As regras de negócio ficam em `src/domain`, como funções puras sem banco e se
 - **Lista de espera sem furar fila:** as confirmações usam uma trava por jogo no PostgreSQL (`pg_advisory_xact_lock`), para que duas pessoas confirmando ao mesmo tempo não ultrapassem o limite de vagas.
 - **Sorteio (`src/domain/draw.ts`):** distribui por posição, equilibra a soma das notas com busca local e escolhe ao acaso entre os melhores resultados. Testado com 150 elencos aleatórios.
 - **Dinheiro em centavos:** rateio sem perder centavos (`splitCents`).
+- **Notificações (RF48):** toda notificação nasce de uma atividade (`logActivity`). As que pedem push são enviadas depois da resposta (`after` do Next), relendo a atividade no banco — se a transação foi desfeita, nada sai. O público é o mesmo do sino (pagamentos só para organizadores) e quem fez a ação nunca é avisado (`src/domain/notify.ts`). Inscrições expiradas são removidas sozinhas.
 - **Notas secretas:** a nota do jogador só é enviada ao navegador de organizadores.
 - **Acessibilidade:** auditada com axe-core (0 violações WCAG 2.1 AA). Inclui preferências de fonte, contraste e animação, e todas as ações funcionam por teclado.
 - `cacheComponents` do Next 16 está desligado para manter o modelo de renderização dinâmica, que é mais simples com sessão.

@@ -218,6 +218,8 @@ export async function approveMember(patotaId: string, membershipId: string) {
       actorId: me.id,
       message: `${memberName(member)} entrou na patota`,
       href: `/patotas/${patotaId}/membros`,
+      // Push só para quem foi aprovado: "seu pedido foi aceito".
+      push: { only: [membershipId] },
     });
     refresh(patotaId);
     return { ok: true, message: `${memberName(member)} agora faz parte da patota.` };

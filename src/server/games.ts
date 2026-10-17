@@ -76,6 +76,8 @@ async function fillSpots(tx: Tx, gameId: string) {
           patotaId: game.patotaId,
           message: `${memberName(a.membership)} saiu da lista de espera e está confirmado no jogo de ${formatGameDate(game.startsAt)}`,
           href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+          // O push vai só para quem foi promovido; o resto da patota vê no app.
+          push: { only: [a.membershipId] },
         },
         tx,
       );
@@ -152,6 +154,7 @@ export async function ensureNextGames(patotaIds: string[]) {
         patotaId: p.id,
         message: `Novo jogo marcado: ${formatGameDate(startsAt)}`,
         href: `/patotas/${p.id}/jogos/${game.id}`,
+        push: true,
       });
     } catch (e) {
       // P2002 = outra requisição criou o mesmo jogo ao mesmo tempo (ou já existe um cancelado nesse horário).

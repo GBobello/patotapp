@@ -176,6 +176,7 @@ export async function reportPayment(chargeId: string) {
       message: `${memberName({ ...membership, user })} avisou que pagou: ${charge.description} (${formatMoney(charge.amountCents)})`,
       href: `/patotas/${charge.patotaId}/financeiro`,
       managersOnly: true,
+      push: true,
     });
     refresh(charge.patotaId);
     return { ok: true, message: "Avisamos o organizador. O pagamento aparece como pago depois que ele confirmar." };
@@ -195,6 +196,17 @@ export async function setChargeStatus(chargeId: string, status: string) {
       where: { id: chargeId },
       data: { status: next, paidAt: next === "PAID" ? new Date() : null, reportedAt: next === "PENDING" ? null : undefined },
     });
+    if (next === "PAID" && charge.status !== "PAID") {
+      const payer = await db.membership.findUnique({ where: { id: charge.membershipId }, include: { user: true } });
+      await logActivity({
+        patotaId: charge.patotaId,
+        actorId: membership.id,
+        message: `Pagamento confirmado: ${payer ? memberName(payer) : "integrante"} — ${charge.description} (${formatMoney(charge.amountCents)})`,
+        href: `/patotas/${charge.patotaId}/financeiro`,
+        managersOnly: true,
+        push: true,
+      });
+    }
     refresh(charge.patotaId);
     const messages = { PAID: "Pagamento confirmado.", WAIVED: "Cobrança marcada como isenta.", PENDING: "Cobrança reaberta." };
     return { ok: true, message: messages[next] };

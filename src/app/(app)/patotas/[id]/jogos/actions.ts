@@ -71,7 +71,7 @@ function isDuplicateGame(e: unknown) {
 /** RF16, RF17: cria um jogo; opcionalmente salva data/hora como padrão recorrente da patota. */
 export async function createGame(patotaId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   return guarded(async () => {
-    await requireManager(patotaId);
+    const { membership } = await requireManager(patotaId);
     const result = parseGameForm(formData);
     if (result.error) return result.error;
 
@@ -111,8 +111,10 @@ export async function createGame(patotaId: string, _prev: ActionResult, formData
 
     await logActivity({
       patotaId,
+      actorId: membership.id,
       message: `Novo jogo marcado: ${formatGameDate(startsAt)}`,
       href: `/patotas/${patotaId}/jogos/${game.id}`,
+      push: true,
     });
     refreshPatota(patotaId);
     redirect(`/patotas/${patotaId}/jogos/${game.id}`);
@@ -172,6 +174,7 @@ export async function updateGame(gameId: string, _prev: ActionResult, formData: 
         startsAt.getTime() !== game.startsAt.getTime() ? ` (agora ${formatGameDate(startsAt)})` : ""
       }${demoted.length ? `; ${demoted.length} voltaram para a lista de espera` : ""}`,
       href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+      push: true,
     });
     refreshPatota(game.patotaId);
     redirect(`/patotas/${game.patotaId}/jogos/${gameId}?${demoted.length ? `editado=${demoted.length}` : "editado=0"}`);
@@ -278,6 +281,7 @@ export async function cancelGame(gameId: string) {
       actorId: membership.id,
       message: `Jogo de ${formatGameDate(game.startsAt)} foi cancelado`,
       href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+      push: true,
     });
     refreshPatota(game.patotaId);
     return { ok: true, message: "Jogo cancelado." };
@@ -328,14 +332,16 @@ export async function drawGameTeams(gameId: string) {
 export async function publishDraw(gameId: string) {
   return guarded(async () => {
     const { game } = await requireGame(gameId);
-    await requireManager(game.patotaId);
+    const { membership } = await requireManager(game.patotaId);
     if (!game.draw) return { error: "Sorteie os times primeiro." };
 
     await db.game.update({ where: { id: gameId }, data: { drawPublishedAt: new Date() } });
     await logActivity({
       patotaId: game.patotaId,
+      actorId: membership.id,
       message: `Times do jogo de ${formatGameDate(game.startsAt)} publicados`,
       href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+      push: true,
     });
     refreshPatota(game.patotaId);
     return { ok: true, message: "Times publicados para todos." };
@@ -449,6 +455,7 @@ export async function saveGameResult(gameId: string, _prev: ActionResult, formDa
       actorId: membership.id,
       message: `Resultado do jogo de ${formatGameDate(game.startsAt)} registrado${scoreText}`,
       href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+      push: true,
     });
     revalidatePath(`/patotas/${game.patotaId}`, "layout");
     return { ok: true, message: "Resultado salvo. As cobranças do jogo agora usam quem compareceu." };
