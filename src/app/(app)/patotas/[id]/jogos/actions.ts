@@ -315,3 +315,63 @@ export async function deleteGameComment(commentId: string) {
     return { ok: true, message: "Comentário apagado." };
   });
 }
+
+// ---------- Resultado do jogo (RF52) ----------
+
+const smallInt = (max: number) => (v: FormDataEntryValue | null) => {
+  const n = Number(String(v ?? "").trim() || 0);
+  return Number.isInteger(n) && n >= 0 && n <= max ? n : null;
+};
+
+/** Organizador registra quem compareceu, os gols e o placar. O rateio passa a usar a presença real. */
+export async function saveGameResult(gameId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  return guarded(async () => {
+    const { game } = await requireGame(gameId);
+    const { membership } = await requireManager(game.patotaId);
+    if (game.status === "CANCELLED") return { error: "Este jogo foi cancelado." };
+    if (game.startsAt > new Date()) return { error: "O resultado só pode ser registrado depois que o jogo começar." };
+
+    const attendances = await db.attendance.findMany({ where: { gameId } });
+    const draw = parseStoredDraw(game.draw);
+
+    const goals = new Map<string, number>();
+    for (const a of attendances) {
+      const g = smallInt(50)(formData.get(`goals:${a.membershipId}`));
+      if (g === null) return { error: "Gols devem ser números inteiros entre 0 e 50." };
+      goals.set(a.membershipId, g);
+    }
+
+    // Placar só vale completo: todos os times preenchidos.
+    const rawScores = (draw?.teams ?? []).map((_, i) => formData.get(`score:${i}`));
+    const filled = rawScores.filter((v) => String(v ?? "").trim() !== "");
+    let teamScores: number[] = [];
+    if (filled.length > 0) {
+      if (filled.length !== rawScores.length) return { error: "Preencha o placar de todos os times (ou deixe todos vazios)." };
+      const parsed = rawScores.map(smallInt(99));
+      if (parsed.some((s) => s === null)) return { error: "O placar deve ter números inteiros entre 0 e 99." };
+      teamScores = parsed as number[];
+    }
+
+    await db.$transaction([
+      ...attendances.map((a) =>
+        db.attendance.update({
+          where: { id: a.id },
+          data: { attended: formData.get(`attended:${a.membershipId}`) === "on", goals: goals.get(a.membershipId) ?? 0 },
+        }),
+      ),
+      db.game.update({ where: { id: gameId }, data: { teamScores, resultSavedAt: new Date() } }),
+    ]);
+
+    const scoreText = teamScores.length
+      ? ` — ${teamScores.map((s, i) => `${TEAM_NAMES[i]} ${s}`).join(" × ")}`
+      : "";
+    await logActivity({
+      patotaId: game.patotaId,
+      actorId: membership.id,
+      message: `Resultado do jogo de ${formatGameDate(game.startsAt)} registrado${scoreText}`,
+      href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+    });
+    revalidatePath(`/patotas/${game.patotaId}`, "layout");
+    return { ok: true, message: "Resultado salvo. As cobranças do jogo agora usam quem compareceu." };
+  });
+}

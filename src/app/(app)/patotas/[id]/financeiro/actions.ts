@@ -110,8 +110,9 @@ export async function generateGameCharges(gameId: string) {
     const { game } = await requireGame(gameId);
     const { patota } = await requireManager(game.patotaId);
 
+    // Com resultado registrado (RF52), paga quem compareceu; antes disso, quem confirmou.
     const confirmed = await db.attendance.findMany({
-      where: { gameId, status: "CONFIRMED" },
+      where: game.resultSavedAt ? { gameId, attended: true } : { gameId, status: "CONFIRMED" },
       include: { membership: { include: { user: true } } },
     });
     const charges = gameCharges({

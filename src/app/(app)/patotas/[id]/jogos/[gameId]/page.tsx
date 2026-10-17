@@ -9,6 +9,7 @@ import { AttendanceAdminMenu } from "@/components/attendance-admin-menu";
 import { AttendanceButtons } from "@/components/attendance-buttons";
 import { PlayerList, type PlayerItem } from "@/components/player-list";
 import { GameComments } from "@/components/game-comments";
+import { GameResultForm } from "@/components/game-result-form";
 import { CopyButton, WhatsAppButton } from "@/components/share-buttons";
 import { TeamsSection, type TeamMemberInfo } from "@/components/teams-section";
 import type { AttendanceStatus } from "@/domain/attendance";
@@ -16,12 +17,12 @@ import { formatGameDate, formatGameDateLong } from "@/domain/dates";
 import { canManage } from "@/domain/roles";
 import { memberImage, memberName, memberPositions } from "@/domain/members";
 import { gameListMessage } from "@/domain/share";
-import { parseStoredDraw } from "@/domain/teams";
+import { TEAM_NAMES, parseStoredDraw } from "@/domain/teams";
 import { db } from "@/server/db";
 import { requireGame, syncGameSpots } from "@/server/games";
 import { getOrigin } from "@/server/url";
 import { generateGameCharges } from "../../financeiro/actions";
-import { cancelGame } from "../actions";
+import { cancelGame, saveGameResult } from "../actions";
 
 export async function generateMetadata({ params }: PageProps<"/patotas/[id]/jogos/[gameId]">): Promise<Metadata> {
   const { game } = await requireGame((await params).gameId);
@@ -72,6 +73,8 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
 
   const myStatus = attendances.find((a) => a.membershipId === me.id)?.status ?? null;
   const cancelled = game.status === "CANCELLED";
+  const started = game.startsAt <= new Date();
+  const scorers = attendances.filter((a) => a.attended && a.goals > 0).sort((a, b) => b.goals - a.goals);
   const closed = game.confirmationDeadline <= new Date();
   const confirmed = items("CONFIRMED");
   const teamMembers = new Map<string, TeamMemberInfo>(
@@ -179,6 +182,44 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
             </ActionButton>
           )}
         </Stack>
+      )}
+
+      {game.resultSavedAt && (
+        <Paper variant="outlined" sx={{ p: 2 }} component="section" aria-labelledby="resultado">
+          <Typography id="resultado" variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+            Resultado
+          </Typography>
+          {game.teamScores.length > 0 && (
+            <Typography variant="h5" component="p" sx={{ my: 1 }}>
+              {game.teamScores.map((s, i) => `${TEAM_NAMES[i]} ${s}`).join(" × ")}
+            </Typography>
+          )}
+          <Typography color="text.secondary">
+            {attendances.filter((a) => a.attended).length} jogadores compareceram
+            {scorers.length > 0 && ` · Gols: ${scorers.map((a) => `${memberName(a.membership)} (${a.goals})`).join(", ")}`}
+          </Typography>
+        </Paper>
+      )}
+
+      {manager && !cancelled && started && (
+        <Paper variant="outlined" sx={{ p: 2 }} component="section" aria-labelledby="registrar-resultado">
+          <Typography id="registrar-resultado" variant="subtitle1" component="h3" sx={{ fontWeight: 600, mb: 1 }}>
+            {game.resultSavedAt ? "Corrigir resultado" : "Registrar resultado do jogo"}
+          </Typography>
+          <GameResultForm
+            action={saveGameResult.bind(null, gameId)}
+            teamNames={(parseStoredDraw(game.draw)?.teams ?? []).map((_, i) => TEAM_NAMES[i])}
+            scores={game.teamScores}
+            players={attendances
+              .filter((a) => a.status !== "DECLINED")
+              .map((a) => ({
+                membershipId: a.membershipId,
+                name: memberName(a.membership),
+                attended: a.attended ?? a.status === "CONFIRMED",
+                goals: a.goals,
+              }))}
+          />
+        </Paper>
       )}
 
       <GameComments
