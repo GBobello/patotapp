@@ -15,7 +15,7 @@ import { ListItemLink } from "@/components/list-item-link";
 import { formatGameDate } from "@/domain/dates";
 import { canManage } from "@/domain/roles";
 import { db } from "@/server/db";
-import { attendanceSummarySelect, summarizeGame, upcomingWhere } from "@/server/games";
+import { attendanceSummarySelect, ensureNextGames, summarizeGame, upcomingWhere } from "@/server/games";
 import { requireMember } from "@/server/patotas";
 
 export async function generateMetadata({ params }: PageProps<"/patotas/[id]">): Promise<Metadata> {
@@ -27,6 +27,7 @@ export default async function PatotaHomePage({ params }: PageProps<"/patotas/[id
   const { id } = await params;
   const { patota, membership } = await requireMember(id);
   const manager = canManage(membership.role);
+  await ensureNextGames([id]);
 
   const [upcoming, past] = await Promise.all([
     db.game.findMany({

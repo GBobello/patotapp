@@ -6,10 +6,12 @@ import { z } from "zod";
 import { RESPONSES, checkCanRespond, initialStatus } from "@/domain/attendance";
 import { formatGameDate, fromLocalDateTime, toLocalParts } from "@/domain/dates";
 import { DrawError, drawTeams } from "@/domain/draw";
+import { demotions, gameDeadlines } from "@/domain/games";
 import { memberName, memberPositions } from "@/domain/members";
 import { canManage } from "@/domain/roles";
 import { type StoredDraw, TEAM_NAMES, moveMember, parseStoredDraw } from "@/domain/teams";
 import { type ActionResult, emptyToNull, fieldErrorsFrom, formValues } from "@/lib/forms";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db";
 import { requireGame, withGameLock } from "@/server/games";
 import { logActivity } from "@/server/activity";
@@ -39,11 +41,9 @@ function refreshPatota(patotaId: string) {
   revalidatePath("/");
 }
 
-/** RF16, RF17: cria um jogo; opcionalmente salva data/hora como padrão recorrente da patota. */
-export async function createGame(patotaId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
-  return guarded(async () => {
-    await requireManager(patotaId);
-    const parsed = gameSchema.safeParse({
+/** Valida o formulário de jogo (criar e editar). */
+function parseGameForm(formData: FormData) {
+  const parsed = gameSchema.safeParse({
       date: formData.get("date") ?? "",
       time: formData.get("time") ?? "",
       location: emptyToNull(formData.get("location")),
@@ -52,28 +52,48 @@ export async function createGame(patotaId: string, _prev: ActionResult, formData
       deadlineHours: formData.get("deadlineHours"),
       notes: emptyToNull(formData.get("notes")),
       saveAsDefault: formData.get("saveAsDefault") === "on",
-    });
-    if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed.error), values: formValues(formData) };
+  });
+  if (!parsed.success) return { error: { fieldErrors: fieldErrorsFrom(parsed.error), values: formValues(formData) } } as const;
 
-    const { date, time, deadlineHours, saveAsDefault, ...data } = parsed.data;
-    const startsAt = fromLocalDateTime(date, time);
-    if (!startsAt) return { fieldErrors: { date: "Data ou horário inválido." }, values: formValues(formData) };
-    if (startsAt.getTime() < Date.now() - HOUR) {
-      return { fieldErrors: { date: "A data do jogo já passou." }, values: formValues(formData) };
-    }
+  const startsAt = fromLocalDateTime(parsed.data.date, parsed.data.time);
+  if (!startsAt) return { error: { fieldErrors: { date: "Data ou horário inválido." }, values: formValues(formData) } } as const;
+  if (startsAt.getTime() < Date.now() - HOUR) {
+    return { error: { fieldErrors: { date: "A data do jogo já passou." }, values: formValues(formData) } } as const;
+  }
+  return { data: parsed.data, startsAt } as const;
+}
 
+/** Jogo já existe nesse horário (restrição única patotaId + startsAt). */
+function isDuplicateGame(e: unknown) {
+  return typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "P2002";
+}
+
+/** RF16, RF17: cria um jogo; opcionalmente salva data/hora como padrão recorrente da patota. */
+export async function createGame(patotaId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  return guarded(async () => {
+    await requireManager(patotaId);
+    const result = parseGameForm(formData);
+    if (result.error) return result.error;
+
+    const { startsAt } = result;
+    const { time, deadlineHours, saveAsDefault, location, maxPlayers, teamsCount, notes } = result.data;
+    const data = { location, maxPlayers, teamsCount, notes };
     const patota = await db.patota.findUniqueOrThrow({ where: { id: patotaId } });
-    const game = await db.game.create({
-      data: {
-        ...data,
-        patotaId,
-        startsAt,
-        confirmationDeadline: new Date(startsAt.getTime() - deadlineHours * HOUR),
-        // RF19: mensalistas têm prioridade até X horas antes do jogo.
-        diaristasOpenAt:
-          patota.diaristaWindowHours === null ? null : new Date(startsAt.getTime() - patota.diaristaWindowHours * HOUR),
-      },
-    });
+    let game;
+    try {
+      game = await db.game.create({
+        data: {
+          ...data,
+          patotaId,
+          startsAt,
+          // RF19: mensalistas têm prioridade até X horas antes do jogo.
+          ...gameDeadlines(startsAt, deadlineHours, patota.diaristaWindowHours),
+        },
+      });
+    } catch (e) {
+      if (!isDuplicateGame(e)) throw e;
+      return { fieldErrors: { date: "Já existe um jogo marcado nesse dia e horário." }, values: formValues(formData) };
+    }
 
     if (saveAsDefault) {
       await db.patota.update({
@@ -96,6 +116,65 @@ export async function createGame(patotaId: string, _prev: ActionResult, formData
     });
     refreshPatota(patotaId);
     redirect(`/patotas/${patotaId}/jogos/${game.id}`);
+  });
+}
+
+/**
+ * Editar jogo: data, local, vagas, times, prazo e observações.
+ * Mais vagas → promove da lista de espera; menos vagas → quem confirmou por último volta para a espera.
+ */
+export async function updateGame(gameId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  return guarded(async () => {
+    const { game } = await requireGame(gameId);
+    const { membership, patota } = await requireManager(game.patotaId);
+    if (game.status === "CANCELLED") return { error: "Este jogo foi cancelado." };
+
+    const result = parseGameForm(formData);
+    if (result.error) return result.error;
+    const { startsAt } = result;
+    const { deadlineHours, location, maxPlayers, teamsCount, notes } = result.data;
+
+    let demoted: string[] = [];
+    try {
+      demoted = await withGameLock(gameId, async (tx) => {
+        await tx.game.update({
+          where: { id: gameId },
+          data: {
+            startsAt,
+            location,
+            maxPlayers,
+            teamsCount,
+            notes,
+            ...gameDeadlines(startsAt, deadlineHours, patota.diaristaWindowHours),
+            // Mudou o número de times: o sorteio antigo deixa de valer.
+            ...(teamsCount !== game.teamsCount ? { draw: Prisma.DbNull, drawPublishedAt: null } : {}),
+          },
+        });
+
+        const confirmed = await tx.attendance.findMany({ where: { gameId, status: "CONFIRMED" } });
+        const ids = demotions(
+          confirmed.map((a) => ({ membershipId: a.membershipId, since: a.statusChangedAt })),
+          maxPlayers,
+        );
+        // Mantém statusChangedAt: quem volta fica à frente de quem já estava na espera.
+        if (ids.length) await tx.attendance.updateMany({ where: { gameId, membershipId: { in: ids } }, data: { status: "WAITLIST" } });
+        return ids;
+      });
+    } catch (e) {
+      if (!isDuplicateGame(e)) throw e;
+      return { fieldErrors: { date: "Já existe um jogo marcado nesse dia e horário." }, values: formValues(formData) };
+    }
+
+    await logActivity({
+      patotaId: game.patotaId,
+      actorId: membership.id,
+      message: `Jogo de ${formatGameDate(game.startsAt)} foi alterado${
+        startsAt.getTime() !== game.startsAt.getTime() ? ` (agora ${formatGameDate(startsAt)})` : ""
+      }${demoted.length ? `; ${demoted.length} voltaram para a lista de espera` : ""}`,
+      href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+    });
+    refreshPatota(game.patotaId);
+    redirect(`/patotas/${game.patotaId}/jogos/${gameId}?${demoted.length ? `editado=${demoted.length}` : "editado=0"}`);
   });
 }
 

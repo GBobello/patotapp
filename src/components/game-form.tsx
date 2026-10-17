@@ -21,9 +21,11 @@ export type GameFormDefaults = {
 export function GameForm({
   action,
   defaults,
+  mode = "create",
 }: {
   action: (prev: ActionResult, formData: FormData) => Promise<ActionResult>;
-  defaults: GameFormDefaults;
+  defaults: GameFormDefaults & { notes?: string };
+  mode?: "create" | "edit";
 }) {
   const [state, formAction] = useActionState(action, {});
   const errors = state.fieldErrors ?? {};
@@ -84,18 +86,20 @@ export function GameForm({
             label="Observações (opcional)"
             multiline
             minRows={2}
-            defaultValue={state.values?.notes}
+            defaultValue={state.values?.notes ?? defaults.notes}
             error={Boolean(errors.notes)}
             helperText={errors.notes ?? "Ex.: levar colete escuro"}
           />
         </Grid>
       </Grid>
-      <FormControlLabel
-        control={<Checkbox name="saveAsDefault" defaultChecked />}
-        label="Repetir toda semana neste dia e horário (vira o padrão da patota)"
-      />
-      <SubmitButton size="large" pendingText="Criando…" sx={{ alignSelf: "flex-start" }}>
-        Criar jogo
+      {mode === "create" && (
+        <FormControlLabel
+          control={<Checkbox name="saveAsDefault" defaultChecked />}
+          label="Repetir toda semana neste dia e horário (vira o padrão da patota)"
+        />
+      )}
+      <SubmitButton size="large" pendingText={mode === "create" ? "Criando…" : "Salvando…"} sx={{ alignSelf: "flex-start" }}>
+        {mode === "create" ? "Criar jogo" : "Salvar alterações"}
       </SubmitButton>
     </Stack>
   );

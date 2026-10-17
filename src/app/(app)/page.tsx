@@ -13,7 +13,7 @@ import { JoinByCodeForm } from "@/components/join-by-code-form";
 import { LinkButton, LinkCardActionArea } from "@/components/links";
 import { ROLE_LABELS } from "@/domain/roles";
 import { db } from "@/server/db";
-import { attendanceSummarySelect, summarizeGame, upcomingWhere } from "@/server/games";
+import { attendanceSummarySelect, ensureNextGames, summarizeGame, upcomingWhere } from "@/server/games";
 import { requireUser } from "@/server/session";
 
 export const metadata: Metadata = { title: "Painel" };
@@ -31,6 +31,8 @@ export default async function DashboardPage() {
   const memberships = all.filter((m) => m.status === "ACTIVE");
   // RF10: pedidos de entrada ainda não aprovados.
   const pending = all.filter((m) => m.status === "PENDING");
+
+  await ensureNextGames(memberships.map((m) => m.patotaId));
 
   // RF50: o próximo jogo de cada patota, com a minha situação.
   const upcoming = await db.game.findMany({

@@ -3,6 +3,7 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import { promotions } from "@/domain/attendance";
 import { formatGameDate } from "@/domain/dates";
+import { gameDeadlines, nextAutoGameDate } from "@/domain/games";
 import { memberName } from "@/domain/members";
 import type { Prisma } from "@/generated/prisma/client";
 import { logActivity } from "@/server/activity";
@@ -119,4 +120,42 @@ export function summarizeGame(game: GameWithAttendances, myMembershipId: string,
 /** Jogos que ainda não terminaram (com 3h de tolerância depois do início). */
 export function upcomingWhere() {
   return { startsAt: { gte: new Date(Date.now() - 3 * 60 * 60 * 1000) } };
+}
+
+/**
+ * RF16: se a patota tem jogo semanal e nenhum jogo marcado, cria o próximo com os padrões.
+ * Chamado ao abrir o painel e a patota. Seguro contra duplicação: a restrição única
+ * (patotaId, startsAt) faz a segunda tentativa simultânea falhar sem efeito.
+ */
+export async function ensureNextGames(patotaIds: string[]) {
+  if (!patotaIds.length) return;
+  const patotas = await db.patota.findMany({
+    where: { id: { in: patotaIds }, autoCreateGames: true, defaultWeekday: { not: null }, defaultTime: { not: null } },
+    include: { games: { where: { status: "SCHEDULED", ...upcomingWhere() }, select: { id: true }, take: 1 } },
+  });
+
+  for (const p of patotas) {
+    const startsAt = nextAutoGameDate(p, p.games.length > 0);
+    if (!startsAt) continue;
+    try {
+      const game = await db.game.create({
+        data: {
+          patotaId: p.id,
+          startsAt,
+          location: p.location,
+          maxPlayers: p.defaultMaxPlayers,
+          teamsCount: p.defaultTeamsCount,
+          ...gameDeadlines(startsAt, p.defaultDeadlineHours, p.diaristaWindowHours),
+        },
+      });
+      await logActivity({
+        patotaId: p.id,
+        message: `Novo jogo marcado: ${formatGameDate(startsAt)}`,
+        href: `/patotas/${p.id}/jogos/${game.id}`,
+      });
+    } catch (e) {
+      // P2002 = outra requisição criou o mesmo jogo ao mesmo tempo (ou já existe um cancelado nesse horário).
+      if (!(typeof e === "object" && e !== null && "code" in e && e.code === "P2002")) throw e;
+    }
+  }
 }

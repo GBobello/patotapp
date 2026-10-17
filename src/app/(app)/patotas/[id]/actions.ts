@@ -166,13 +166,17 @@ const rulesSchema = z.object({
   diaristaWindowHours: z
     .union([z.literal(""), z.coerce.number().int().min(0, "Use 0 ou mais horas.").max(168, "Máximo de 168 horas (7 dias).")])
     .transform((v) => (v === "" ? null : v)),
+  autoCreateGames: z.boolean(),
 });
 
-/** RF19: janela de prioridade dos mensalistas. */
+/** RF19: janela de prioridade dos mensalistas; RF16: criação automática do próximo jogo. */
 export async function updateGameRules(patotaId: string, _prev: ActionResult, formData: FormData) {
   return guarded(async () => {
     await requireManager(patotaId);
-    const parsed = rulesSchema.safeParse({ diaristaWindowHours: String(formData.get("diaristaWindowHours") ?? "").trim() });
+    const parsed = rulesSchema.safeParse({
+      diaristaWindowHours: String(formData.get("diaristaWindowHours") ?? "").trim(),
+      autoCreateGames: formData.get("autoCreateGames") === "on",
+    });
     if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed.error), values: formValues(formData) };
 
     await db.patota.update({ where: { id: patotaId }, data: parsed.data });

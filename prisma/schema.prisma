@@ -82,6 +82,8 @@ model Patota {
   diaristaWindowHours  Int?
   /// RF10: quem entra pelo link precisa ser aprovado por um organizador.
   requireApproval      Boolean @default(false)
+  /// RF16: cria o próximo jogo semanal sozinho quando não há jogo marcado.
+  autoCreateGames      Boolean @default(true)
 
   // Financeiro (ciclo 6). Valores em centavos.
   billingMode      BillingMode @default(FIXED_MONTHLY)
@@ -225,6 +227,8 @@ model Game {
   charges     Charge[]
   comments    GameComment[]
 
+  /// Evita jogos duplicados no mesmo horário (inclusive na criação automática).
+  @@unique([patotaId, startsAt])
   @@index([patotaId, startsAt])
 }
 

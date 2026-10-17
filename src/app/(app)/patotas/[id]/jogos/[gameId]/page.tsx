@@ -10,6 +10,7 @@ import { AttendanceButtons } from "@/components/attendance-buttons";
 import { PlayerList, type PlayerItem } from "@/components/player-list";
 import { GameComments } from "@/components/game-comments";
 import { GameResultForm } from "@/components/game-result-form";
+import { LinkButton } from "@/components/links";
 import { CopyButton, WhatsAppButton } from "@/components/share-buttons";
 import { TeamsSection, type TeamMemberInfo } from "@/components/teams-section";
 import type { AttendanceStatus } from "@/domain/attendance";
@@ -29,8 +30,9 @@ export async function generateMetadata({ params }: PageProps<"/patotas/[id]/jogo
   return { title: `Jogo de ${formatGameDate(game.startsAt)}` };
 }
 
-export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogos/[gameId]">) {
+export default async function GamePage({ params, searchParams }: PageProps<"/patotas/[id]/jogos/[gameId]">) {
   const { id, gameId } = await params;
+  const { editado } = await searchParams;
   const { game, membership: me, patota } = await requireGame(gameId);
   if (game.patotaId !== id) notFound();
   const manager = canManage(me.role);
@@ -105,6 +107,12 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
         </Typography>
       </div>
 
+      {typeof editado === "string" && (
+        <Alert severity="success" role="status">
+          Jogo atualizado.
+          {Number(editado) > 0 && ` Como as vagas diminuíram, ${editado} ${Number(editado) === 1 ? "pessoa voltou" : "pessoas voltaram"} para a lista de espera.`}
+        </Alert>
+      )}
       {cancelled && <Alert severity="error">Este jogo foi cancelado.</Alert>}
       {game.notes && <Alert severity="info">{game.notes}</Alert>}
       {!cancelled && !diaristaWindowOpen && (
@@ -164,6 +172,11 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
           <WhatsAppButton text={shareText} label="Enviar lista no WhatsApp" />
           <CopyButton text={shareText} label="Copiar lista" successMessage="Lista copiada!" />
+          {manager && (
+            <LinkButton href={`/patotas/${id}/jogos/${gameId}/editar`} variant="outlined">
+              Editar jogo
+            </LinkButton>
+          )}
           {manager && (
             <ActionButton action={generateGameCharges.bind(null, gameId)}>Gerar cobranças do jogo</ActionButton>
           )}

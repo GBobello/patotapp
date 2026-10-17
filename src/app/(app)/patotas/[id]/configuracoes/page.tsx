@@ -40,7 +40,9 @@ export default async function PatotaSettingsPage({ params }: PageProps<"/patotas
         <Typography variant="h6" component="h2" gutterBottom>
           Regras dos jogos
         </Typography>
-        <GameRulesForm action={updateGameRules.bind(null, id)} diaristaWindowHours={patota.diaristaWindowHours} />
+        <GameRulesForm action={updateGameRules.bind(null, id)} diaristaWindowHours={patota.diaristaWindowHours}
+          autoCreateGames={patota.autoCreateGames}
+        />
       </Paper>
 
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }} id="cobranca">
