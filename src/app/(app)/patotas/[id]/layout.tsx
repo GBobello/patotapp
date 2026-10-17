@@ -14,6 +14,7 @@ export default async function PatotaLayout({ children, params }: LayoutProps<"/p
   const tabs: TabItem[] = [
     { label: "Início", href: base },
     { label: "Integrantes", href: `${base}/membros` },
+    { label: "Financeiro", href: `${base}/financeiro` },
   ];
   if (canManage(membership.role)) tabs.push({ label: "Ajustes", href: `${base}/configuracoes` });
 

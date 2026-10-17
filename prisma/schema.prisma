@@ -73,8 +73,74 @@ model Patota {
   /// null = diaristas podem confirmar desde o início.
   diaristaWindowHours  Int?
 
+  // Financeiro (ciclo 6). Valores em centavos.
+  billingMode      BillingMode @default(FIXED_MONTHLY)
+  monthlyFeeCents  Int         @default(0)
+  dropInFeeCents   Int         @default(0)
+  /// Custo de cada jogo, dividido entre os confirmados no modo rateio.
+  gameCostCents    Int         @default(0)
+  /// Custo fixo mensal (ex.: aluguel), usado para sugerir a mensalidade (RN09).
+  monthlyCostCents Int         @default(0)
+  pixKey           String?
+  /// Goleiros não pagam (RF44).
+  keeperExempt     Boolean     @default(false)
+
   memberships Membership[]
   games       Game[]
+  charges     Charge[]
+  expenses    Expense[]
+}
+
+// ---- Financeiro (ciclo 6) ----
+
+enum BillingMode {
+  FIXED_MONTHLY
+  SPLIT_PER_GAME
+}
+
+enum ChargeStatus {
+  PENDING
+  REPORTED
+  PAID
+  WAIVED
+}
+
+/// Valor que um integrante deve: mensalidade (competence) ou jogo (gameId).
+model Charge {
+  id           String       @id @default(cuid())
+  patotaId     String
+  membershipId String
+  description  String
+  amountCents  Int
+  /// Mês de referência "AAAA-MM" para mensalidades.
+  competence   String?
+  gameId       String?
+  status       ChargeStatus @default(PENDING)
+  reportedAt   DateTime?
+  paidAt       DateTime?
+  createdAt    DateTime     @default(now())
+
+  patota     Patota     @relation(fields: [patotaId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  game       Game?      @relation(fields: [gameId], references: [id], onDelete: SetNull)
+
+  @@unique([membershipId, competence])
+  @@unique([membershipId, gameId])
+  @@index([patotaId, status])
+}
+
+/// Saída de dinheiro do caixa (aluguel, bola, coletes…) (RF38).
+model Expense {
+  id          String   @id @default(cuid())
+  patotaId    String
+  description String
+  amountCents Int
+  date        DateTime
+  createdAt   DateTime @default(now())
+
+  patota Patota @relation(fields: [patotaId], references: [id], onDelete: Cascade)
+
+  @@index([patotaId, date])
 }
 
 /// Vínculo de uma pessoa com uma patota. Papel, tipo e nota são por patota.
@@ -94,6 +160,7 @@ model Membership {
   patota      Patota       @relation(fields: [patotaId], references: [id], onDelete: Cascade)
   user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   attendances Attendance[]
+  charges     Charge[]
 
   @@unique([patotaId, userId])
   @@index([userId])
@@ -134,6 +201,7 @@ model Game {
 
   patota      Patota       @relation(fields: [patotaId], references: [id], onDelete: Cascade)
   attendances Attendance[]
+  charges     Charge[]
 
   @@index([patotaId, startsAt])
 }

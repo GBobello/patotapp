@@ -19,6 +19,7 @@ import { parseStoredDraw } from "@/domain/teams";
 import { db } from "@/server/db";
 import { requireGame, syncGameSpots } from "@/server/games";
 import { getOrigin } from "@/server/url";
+import { generateGameCharges } from "../../financeiro/actions";
 import { cancelGame } from "../actions";
 
 export async function generateMetadata({ params }: PageProps<"/patotas/[id]/jogos/[gameId]">): Promise<Metadata> {
@@ -154,6 +155,9 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
           <WhatsAppButton text={shareText} label="Enviar lista no WhatsApp" />
           <CopyButton text={shareText} label="Copiar lista" successMessage="Lista copiada!" />
+          {manager && (
+            <ActionButton action={generateGameCharges.bind(null, gameId)}>Gerar cobranças do jogo</ActionButton>
+          )}
           {manager && (
             <ActionButton
               action={cancelGame.bind(null, gameId)}
