@@ -76,7 +76,7 @@ export async function generateMonthlyCharges(patotaId: string, competence: strin
     if (patota.monthlyFeeCents <= 0) return { error: "Defina o valor da mensalidade nos ajustes de cobrança." };
 
     const mensalistas = await db.membership.findMany({
-      where: { patotaId, type: "MENSALISTA" },
+      where: { patotaId, type: "MENSALISTA", status: "ACTIVE" },
       include: { user: true },
     });
     const result = await db.charge.createMany({

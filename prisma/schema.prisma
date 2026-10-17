@@ -52,6 +52,12 @@ enum MemberType {
   DIARISTA
 }
 
+enum MembershipStatus {
+  ACTIVE
+  /// Pediu para entrar e aguarda aprovação de um organizador (RF10).
+  PENDING
+}
+
 model Patota {
   id          String   @id @default(cuid())
   name        String
@@ -74,6 +80,8 @@ model Patota {
   /// Prioridade dos mensalistas (RF19): diaristas só ocupam vagas X horas antes do jogo.
   /// null = diaristas podem confirmar desde o início.
   diaristaWindowHours  Int?
+  /// RF10: quem entra pelo link precisa ser aprovado por um organizador.
+  requireApproval      Boolean @default(false)
 
   // Financeiro (ciclo 6). Valores em centavos.
   billingMode      BillingMode @default(FIXED_MONTHLY)
@@ -150,16 +158,17 @@ model Expense {
 /// Vínculo de uma pessoa com uma patota. Papel, tipo e nota são por patota.
 /// Convidados sem conta (RF13) têm userId nulo e usam guestName/guestPosition.
 model Membership {
-  id            String     @id @default(cuid())
+  id            String           @id @default(cuid())
   patotaId      String
   userId        String?
-  role          Role       @default(PLAYER)
-  type          MemberType @default(MENSALISTA)
+  role          Role             @default(PLAYER)
+  type          MemberType       @default(MENSALISTA)
   /// Nota de 1 a 5 usada no sorteio (RF26). Visível só para organizadores (RF27).
-  rating        Int        @default(3)
+  rating        Int              @default(3)
+  status        MembershipStatus @default(ACTIVE)
   guestName     String?
   guestPosition Position?
-  createdAt     DateTime   @default(now())
+  createdAt     DateTime         @default(now())
 
   patota        Patota                 @relation(fields: [patotaId], references: [id], onDelete: Cascade)
   user          User?                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -205,6 +214,10 @@ model Game {
   draw                 Json?
   /// Enquanto nulo, só organizadores veem os times (RF35).
   drawPublishedAt      DateTime?
+  /// Placar de cada time, na ordem do sorteio (RF52).
+  teamScores           Int[]      @default([])
+  /// Quando o organizador registrou presença real e placar. Depois disso o rateio usa quem foi.
+  resultSavedAt        DateTime?
   createdAt            DateTime   @default(now())
 
   patota      Patota        @relation(fields: [patotaId], references: [id], onDelete: Cascade)
@@ -222,6 +235,9 @@ model Attendance {
   status          AttendanceStatus
   /// Momento da última mudança de status — define a ordem da lista de espera.
   statusChangedAt DateTime         @default(now())
+  /// Presença real marcada pelo organizador depois do jogo (RF52). null = não marcada.
+  attended        Boolean?
+  goals           Int              @default(0)
 
   game       Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)

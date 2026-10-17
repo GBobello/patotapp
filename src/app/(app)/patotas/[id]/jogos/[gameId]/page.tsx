@@ -42,7 +42,7 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
       include: { membership: { include: { user: true } } },
       orderBy: { statusChangedAt: "asc" },
     }),
-    db.membership.findMany({ where: { patotaId: id }, include: { user: true } }),
+    db.membership.findMany({ where: { patotaId: id, status: "ACTIVE" }, include: { user: true } }),
     db.gameComment.findMany({
       where: { gameId },
       include: { author: { include: { user: true } } },

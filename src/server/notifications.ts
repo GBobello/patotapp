@@ -7,7 +7,7 @@ import { db } from "@/server/db";
  * respeitando o público (pagamentos só para organizadores).
  */
 async function notificationsWhere(userId: string): Promise<Prisma.ActivityWhereInput | null> {
-  const memberships = await db.membership.findMany({ where: { userId }, select: { id: true, patotaId: true, role: true } });
+  const memberships = await db.membership.findMany({ where: { userId, status: "ACTIVE" }, select: { id: true, patotaId: true, role: true } });
   const myIds = memberships.map((m) => m.id);
 
   if (!memberships.length) return null;

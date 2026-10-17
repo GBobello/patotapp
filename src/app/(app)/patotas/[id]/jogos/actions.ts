@@ -162,7 +162,7 @@ export async function setAttendance(gameId: string, membershipId: string, wanted
   return guarded(async () => {
     const { game, membership } = await requireGame(gameId);
     if (!canManage(membership.role)) throw new ForbiddenError();
-    const target = await db.membership.findFirst({ where: { id: membershipId, patotaId: game.patotaId } });
+    const target = await db.membership.findFirst({ where: { id: membershipId, patotaId: game.patotaId, status: "ACTIVE" } });
     if (!target) throw new ForbiddenError("Integrante não encontrado.");
 
     const blocked = checkCanRespond({ ...game, isManager: true });

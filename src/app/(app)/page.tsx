@@ -23,11 +23,14 @@ export default async function DashboardPage() {
   const firstName = (user.nickname ?? user.name ?? "").split(" ")[0];
   const profileIncomplete = !user.name || !user.primaryPosition;
 
-  const memberships = await db.membership.findMany({
+  const all = await db.membership.findMany({
     where: { userId: user.id },
-    include: { patota: { include: { _count: { select: { memberships: true } } } } },
+    include: { patota: { include: { _count: { select: { memberships: { where: { status: "ACTIVE" } } } } } } },
     orderBy: { patota: { name: "asc" } },
   });
+  const memberships = all.filter((m) => m.status === "ACTIVE");
+  // RF10: pedidos de entrada ainda não aprovados.
+  const pending = all.filter((m) => m.status === "PENDING");
 
   // RF50: o próximo jogo de cada patota, com a minha situação.
   const upcoming = await db.game.findMany({
@@ -119,6 +122,12 @@ export default async function DashboardPage() {
             </li>
           ))}
         </Stack>
+      )}
+
+      {pending.length > 0 && (
+        <Alert severity="info">
+          Aguardando aprovação para entrar em: {pending.map((m) => m.patota.name).join(", ")}.
+        </Alert>
       )}
 
       <Paper variant="outlined" sx={{ p: 2 }}>

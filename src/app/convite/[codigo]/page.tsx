@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import Alert from "@mui/material/Alert";
 import Container from "@mui/material/Container";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
@@ -23,8 +24,8 @@ export default async function InvitePage({ params }: PageProps<"/convite/[codigo
   const patota = await db.patota.findUnique({
     where: { inviteCode: code },
     include: {
-      _count: { select: { memberships: true } },
-      memberships: { where: { userId: session.user.id }, select: { id: true } },
+      _count: { select: { memberships: { where: { status: "ACTIVE" } } } },
+      memberships: { where: { userId: session.user.id }, select: { id: true, status: true } },
     },
   });
 
@@ -41,14 +42,25 @@ export default async function InvitePage({ params }: PageProps<"/convite/[codigo
             <Typography>
               {patota._count.memberships} {patota._count.memberships === 1 ? "integrante" : "integrantes"}
             </Typography>
-            {patota.memberships.length > 0 ? (
+            {patota.memberships[0]?.status === "ACTIVE" ? (
               <LinkButton href={`/patotas/${patota.id}`} variant="contained" size="large">
                 Você já participa — abrir patota
               </LinkButton>
+            ) : patota.memberships[0]?.status === "PENDING" ? (
+              <Alert severity="info" role="status">
+                Pedido enviado. Você entra assim que um organizador aprovar.
+              </Alert>
             ) : (
-              <ActionButton action={acceptInvite.bind(null, code)} variant="contained" size="large">
-                Entrar na patota
-              </ActionButton>
+              <>
+                {patota.requireApproval && (
+                  <Typography variant="body2" color="text.secondary">
+                    Esta patota aprova novos integrantes. Seu pedido vai para o organizador.
+                  </Typography>
+                )}
+                <ActionButton action={acceptInvite.bind(null, code)} variant="contained" size="large">
+                  {patota.requireApproval ? "Pedir para entrar" : "Entrar na patota"}
+                </ActionButton>
+              </>
             )}
           </Stack>
         ) : (

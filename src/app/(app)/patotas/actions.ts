@@ -46,14 +46,25 @@ export async function acceptInvite(code: string): Promise<ActionResult> {
   const existing = await db.membership.findUnique({
     where: { patotaId_userId: { patotaId: patota.id, userId: user.id } },
   });
+  if (existing?.status === "PENDING") {
+    return { ok: true, message: "Seu pedido já foi enviado. Aguarde a aprovação do organizador." };
+  }
   if (!existing) {
-    const membership = await db.membership.create({ data: { patotaId: patota.id, userId: user.id } });
+    // RF10: com aprovação ligada, a entrada vira um pedido que o organizador aprova.
+    const status = patota.requireApproval ? ("PENDING" as const) : ("ACTIVE" as const);
+    const membership = await db.membership.create({ data: { patotaId: patota.id, userId: user.id, status } });
+    const name = memberName({ ...membership, user });
     await logActivity({
       patotaId: patota.id,
       actorId: membership.id,
-      message: `${memberName({ ...membership, user })} entrou na patota`,
+      message: status === "PENDING" ? `${name} pediu para entrar na patota` : `${name} entrou na patota`,
       href: `/patotas/${patota.id}/membros`,
+      managersOnly: status === "PENDING",
     });
+    if (status === "PENDING") {
+      revalidatePath(`/convite/${code}`);
+      return { ok: true, message: "Pedido enviado! Você entra assim que o organizador aprovar." };
+    }
   }
 
   revalidatePath("/");

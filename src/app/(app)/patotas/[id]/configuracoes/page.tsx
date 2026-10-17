@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { ApprovalSwitch } from "@/components/approval-switch";
 import { BillingSettingsForm } from "@/components/billing-settings-form";
 import { DeletePatotaForm } from "@/components/delete-patota-form";
 import { GameRulesForm } from "@/components/game-rules-form";
@@ -20,7 +21,7 @@ export default async function PatotaSettingsPage({ params }: PageProps<"/patotas
   const { id } = await params;
   const { patota, membership } = await requireMember(id);
   if (!canManage(membership.role)) notFound();
-  const mensalistas = await db.membership.count({ where: { patotaId: id, type: "MENSALISTA" } });
+  const mensalistas = await db.membership.count({ where: { patotaId: id, type: "MENSALISTA", status: "ACTIVE" } });
 
   return (
     <Stack spacing={3}>
@@ -56,6 +57,13 @@ export default async function PatotaSettingsPage({ params }: PageProps<"/patotas
             keeperExempt: patota.keeperExempt,
           }}
           mensalistas={mensalistas} />
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+        <Typography variant="h6" component="h2" gutterBottom>
+          Entrada na patota
+        </Typography>
+        <ApprovalSwitch patotaId={id} initial={patota.requireApproval} />
       </Paper>
 
       <InviteCard patota={patota} />

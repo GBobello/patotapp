@@ -3,6 +3,7 @@ import Stack from "@mui/material/Stack";
 import { ActionButton } from "@/components/action-button";
 import { AddGuestDialog } from "@/components/add-guest-dialog";
 import { MembersList, type MemberRow } from "@/components/members-list";
+import { PendingRequests } from "@/components/pending-requests";
 import { memberImage, memberName, memberPositions } from "@/domain/members";
 import { canManage, isOrganizer } from "@/domain/roles";
 import { db } from "@/server/db";
@@ -18,10 +19,13 @@ export default async function MembersPage({ params }: PageProps<"/patotas/[id]/m
   const { membership: me } = await requireMember(id);
   const manager = canManage(me.role);
 
-  const memberships = await db.membership.findMany({
+  const all = await db.membership.findMany({
     where: { patotaId: id },
     include: { user: true },
+    orderBy: { createdAt: "asc" },
   });
+  const memberships = all.filter((m) => m.status === "ACTIVE");
+  const pending = manager ? all.filter((m) => m.status === "PENDING") : [];
 
   const rows: MemberRow[] = memberships
     .map((m) => ({
@@ -40,6 +44,12 @@ export default async function MembersPage({ params }: PageProps<"/patotas/[id]/m
 
   return (
     <Stack spacing={3}>
+      {pending.length > 0 && (
+        <PendingRequests
+          patotaId={id}
+          requests={pending.map((m) => ({ id: m.id, name: memberName(m), email: m.user?.email ?? "", createdAt: m.createdAt }))}
+        />
+      )}
       {manager && (
         <Stack direction="row" sx={{ justifyContent: "flex-end" }}>
           <AddGuestDialog patotaId={id} />

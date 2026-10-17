@@ -3,13 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { memberName } from "@/domain/members";
 import { POSITIONS } from "@/domain/positions";
 import { MEMBER_TYPES, ROLES, checkOrganizerRemains, generateInviteCode } from "@/domain/roles";
 import { type ActionResult, fieldErrorsFrom, formValues } from "@/lib/forms";
 import { parsePatotaForm } from "@/lib/schemas";
+import { logActivity } from "@/server/activity";
 import { db } from "@/server/db";
 import { guarded } from "@/server/guard";
-import { ForbiddenError, requireManager, requireMember, requireOrganizer } from "@/server/patotas";
+import { ACTIVE, ForbiddenError, requireManager, requireMember, requireOrganizer } from "@/server/patotas";
 
 function refresh(patotaId: string) {
   revalidatePath(`/patotas/${patotaId}`, "layout");
@@ -22,7 +24,7 @@ async function organizerCount(patotaId: string) {
 
 /** Busca um integrante garantindo que ele pertence à patota informada. */
 async function findMember(patotaId: string, membershipId: string) {
-  const member = await db.membership.findFirst({ where: { id: membershipId, patotaId } });
+  const member = await db.membership.findFirst({ where: { id: membershipId, patotaId, ...ACTIVE } });
   if (!member) throw new ForbiddenError("Integrante não encontrado.");
   return member;
 }
@@ -176,5 +178,54 @@ export async function updateGameRules(patotaId: string, _prev: ActionResult, for
     await db.patota.update({ where: { id: patotaId }, data: parsed.data });
     refresh(patotaId);
     return { ok: true, message: "Regras salvas. Valem para os próximos jogos criados." };
+  });
+}
+
+// ---------- Pedidos de entrada (RF10) ----------
+
+export async function setRequireApproval(patotaId: string, enabled: boolean) {
+  return guarded(async () => {
+    await requireManager(patotaId);
+    await db.patota.update({ where: { id: patotaId }, data: { requireApproval: enabled } });
+    refresh(patotaId);
+    return {
+      ok: true,
+      message: enabled ? "Agora quem usar o link precisa da sua aprovação." : "Quem usar o link entra direto na patota.",
+    };
+  });
+}
+
+async function findPending(patotaId: string, membershipId: string) {
+  const member = await db.membership.findFirst({
+    where: { id: membershipId, patotaId, status: "PENDING" },
+    include: { user: true },
+  });
+  if (!member) throw new ForbiddenError("Pedido não encontrado (talvez já tenha sido respondido).");
+  return member;
+}
+
+export async function approveMember(patotaId: string, membershipId: string) {
+  return guarded(async () => {
+    const { membership: me } = await requireManager(patotaId);
+    const member = await findPending(patotaId, membershipId);
+    await db.membership.update({ where: { id: membershipId }, data: { status: "ACTIVE" } });
+    await logActivity({
+      patotaId,
+      actorId: me.id,
+      message: `${memberName(member)} entrou na patota`,
+      href: `/patotas/${patotaId}/membros`,
+    });
+    refresh(patotaId);
+    return { ok: true, message: `${memberName(member)} agora faz parte da patota.` };
+  });
+}
+
+export async function rejectMember(patotaId: string, membershipId: string) {
+  return guarded(async () => {
+    await requireManager(patotaId);
+    const member = await findPending(patotaId, membershipId);
+    await db.membership.delete({ where: { id: membershipId } });
+    refresh(patotaId);
+    return { ok: true, message: `Pedido de ${memberName(member)} recusado.` };
   });
 }

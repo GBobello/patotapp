@@ -77,7 +77,7 @@ export async function deleteAccount(_prev: ActionResult, formData: FormData): Pr
 
   const organizing = await db.membership.findMany({
     where: { userId: user.id, role: "ORGANIZER" },
-    include: { patota: { include: { memberships: { select: { role: true } } } } },
+    include: { patota: { include: { memberships: { where: { status: "ACTIVE" }, select: { role: true } } } } },
   });
   const blocking = organizing.filter(
     (m) => m.patota.memberships.length > 1 && m.patota.memberships.filter((x) => x.role === "ORGANIZER").length === 1,
