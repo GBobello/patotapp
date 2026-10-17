@@ -126,6 +126,10 @@ model Game {
   confirmationDeadline DateTime
   status               GameStatus @default(SCHEDULED)
   notes                String?
+  /// Resultado do sorteio: { teams: [{ members: [{ membershipId, role }] }], warnings } (RF29).
+  draw                 Json?
+  /// Enquanto nulo, só organizadores veem os times (RF35).
+  drawPublishedAt      DateTime?
   createdAt            DateTime   @default(now())
 
   patota      Patota       @relation(fields: [patotaId], references: [id], onDelete: Cascade)

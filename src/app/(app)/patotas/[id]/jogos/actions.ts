@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { RESPONSES, checkCanRespond, initialStatus } from "@/domain/attendance";
 import { formatGameDate, fromLocalDateTime, toLocalParts } from "@/domain/dates";
+import { DrawError, drawTeams } from "@/domain/draw";
+import { memberPositions } from "@/domain/members";
 import { canManage } from "@/domain/roles";
+import { type StoredDraw, TEAM_NAMES, moveMember, parseStoredDraw } from "@/domain/teams";
 import { type ActionResult, emptyToNull, fieldErrorsFrom, formValues } from "@/lib/forms";
 import { db } from "@/server/db";
 import { requireGame, withGameLock } from "@/server/games";
@@ -171,5 +174,72 @@ export async function cancelGame(gameId: string) {
     await db.game.update({ where: { id: gameId }, data: { status: "CANCELLED" } });
     refreshPatota(game.patotaId);
     return { ok: true, message: "Jogo cancelado." };
+  });
+}
+
+// ---------- Sorteio de times (ciclo 5) ----------
+
+/** RF29–RF32: sorteia os times entre os confirmados. O resultado fica oculto até ser publicado. */
+export async function drawGameTeams(gameId: string) {
+  return guarded(async () => {
+    const { game } = await requireGame(gameId);
+    await requireManager(game.patotaId);
+    if (game.status === "CANCELLED") return { error: "Este jogo foi cancelado." };
+
+    const confirmed = await db.attendance.findMany({
+      where: { gameId, status: "CONFIRMED" },
+      include: { membership: { include: { user: true } } },
+    });
+
+    try {
+      const result = drawTeams(
+        confirmed.map(({ membership: m }) => ({
+          id: m.id,
+          rating: m.rating,
+          ...memberPositions(m),
+        })),
+        { teamsCount: game.teamsCount },
+      );
+      const draw: StoredDraw = {
+        teams: result.teams.map((t) => ({
+          members: t.players.map((p) => ({ membershipId: p.id, role: p.role })),
+        })),
+        warnings: result.warnings,
+      };
+      await db.game.update({ where: { id: gameId }, data: { draw, drawPublishedAt: null } });
+    } catch (e) {
+      if (e instanceof DrawError) return { error: e.message };
+      throw e;
+    }
+
+    revalidatePath(`/patotas/${game.patotaId}/jogos/${gameId}`);
+    return { ok: true, message: "Times sorteados! Confira e publique para a galera ver." };
+  });
+}
+
+/** RF35: torna os times visíveis para todos. */
+export async function publishDraw(gameId: string) {
+  return guarded(async () => {
+    const { game } = await requireGame(gameId);
+    await requireManager(game.patotaId);
+    if (!game.draw) return { error: "Sorteie os times primeiro." };
+
+    await db.game.update({ where: { id: gameId }, data: { drawPublishedAt: new Date() } });
+    refreshPatota(game.patotaId);
+    return { ok: true, message: "Times publicados para todos." };
+  });
+}
+
+/** RF34: ajuste manual — move um jogador para outro time. */
+export async function moveDrawPlayer(gameId: string, membershipId: string, toTeam: number) {
+  return guarded(async () => {
+    const { game } = await requireGame(gameId);
+    await requireManager(game.patotaId);
+    const draw = parseStoredDraw(game.draw);
+    if (!draw) return { error: "Sorteie os times primeiro." };
+
+    await db.game.update({ where: { id: gameId }, data: { draw: moveMember(draw, membershipId, toTeam) } });
+    revalidatePath(`/patotas/${game.patotaId}/jogos/${gameId}`);
+    return { ok: true, message: `Jogador movido para o ${TEAM_NAMES[toTeam]}.` };
   });
 }

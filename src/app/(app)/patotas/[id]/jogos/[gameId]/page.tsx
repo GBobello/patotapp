@@ -9,11 +9,13 @@ import { AttendanceAdminMenu } from "@/components/attendance-admin-menu";
 import { AttendanceButtons } from "@/components/attendance-buttons";
 import { PlayerList, type PlayerItem } from "@/components/player-list";
 import { CopyButton, WhatsAppButton } from "@/components/share-buttons";
+import { TeamsSection, type TeamMemberInfo } from "@/components/teams-section";
 import type { AttendanceStatus } from "@/domain/attendance";
 import { formatGameDate, formatGameDateLong } from "@/domain/dates";
 import { canManage } from "@/domain/roles";
 import { memberImage, memberName, memberPositions } from "@/domain/members";
 import { gameListMessage } from "@/domain/share";
+import { parseStoredDraw } from "@/domain/teams";
 import { db } from "@/server/db";
 import { requireGame, syncGameSpots } from "@/server/games";
 import { getOrigin } from "@/server/url";
@@ -65,6 +67,9 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
   const cancelled = game.status === "CANCELLED";
   const closed = game.confirmationDeadline <= new Date();
   const confirmed = items("CONFIRMED");
+  const teamMembers = new Map<string, TeamMemberInfo>(
+    members.map((m) => [m.id, { name: memberName(m), rating: m.rating, primary: memberPositions(m).primary }]),
+  );
 
   const shareText = gameListMessage({
     patotaName: patota.name,
@@ -117,6 +122,19 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
             />
           </Stack>
         </Paper>
+      )}
+
+      {!cancelled && (
+        <TeamsSection
+          gameId={gameId}
+          title={`${patota.name} — ${formatGameDate(game.startsAt)}`}
+          draw={parseStoredDraw(game.draw)}
+          published={Boolean(game.drawPublishedAt)}
+          manager={manager}
+          teamsCount={game.teamsCount}
+          confirmedIds={byStatus("CONFIRMED").map((a) => a.membershipId)}
+          members={teamMembers}
+        />
       )}
 
       <PlayerList
