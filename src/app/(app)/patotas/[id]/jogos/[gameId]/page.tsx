@@ -8,6 +8,7 @@ import { ActionButton } from "@/components/action-button";
 import { AttendanceAdminMenu } from "@/components/attendance-admin-menu";
 import { AttendanceButtons } from "@/components/attendance-buttons";
 import { PlayerList, type PlayerItem } from "@/components/player-list";
+import { GameComments } from "@/components/game-comments";
 import { CopyButton, WhatsAppButton } from "@/components/share-buttons";
 import { TeamsSection, type TeamMemberInfo } from "@/components/teams-section";
 import type { AttendanceStatus } from "@/domain/attendance";
@@ -35,13 +36,18 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
   const diaristaWindowOpen = !game.diaristasOpenAt || game.diaristasOpenAt <= new Date();
   if (game.status === "SCHEDULED" && game.diaristasOpenAt) await syncGameSpots(gameId);
 
-  const [attendances, members] = await Promise.all([
+  const [attendances, members, comments] = await Promise.all([
     db.attendance.findMany({
       where: { gameId },
       include: { membership: { include: { user: true } } },
       orderBy: { statusChangedAt: "asc" },
     }),
     db.membership.findMany({ where: { patotaId: id }, include: { user: true } }),
+    db.gameComment.findMany({
+      where: { gameId },
+      include: { author: { include: { user: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
   const byStatus = (s: AttendanceStatus) => attendances.filter((a) => a.status === s);
@@ -174,6 +180,17 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
           )}
         </Stack>
       )}
+
+      <GameComments
+        gameId={gameId}
+        comments={comments.map((c) => ({
+          id: c.id,
+          author: c.author ? memberName(c.author) : "Ex-integrante",
+          text: c.text,
+          createdAt: c.createdAt,
+          canDelete: manager || c.authorId === me.id,
+        }))}
+      />
     </Stack>
   );
 }

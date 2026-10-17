@@ -10,9 +10,10 @@ import {
   parseMoney,
 } from "@/domain/billing";
 import { formatGameDate, fromLocalDateTime } from "@/domain/dates";
-import { memberPositions } from "@/domain/members";
+import { memberName, memberPositions } from "@/domain/members";
 import { canManage } from "@/domain/roles";
 import { type ActionResult, emptyToNull, fieldErrorsFrom, formValues } from "@/lib/forms";
+import { logActivity } from "@/server/activity";
 import { db } from "@/server/db";
 import { requireGame } from "@/server/games";
 import { guarded } from "@/server/guard";
@@ -163,11 +164,18 @@ async function loadCharge(chargeId: string) {
 /** RF41: o próprio integrante avisa que pagou. */
 export async function reportPayment(chargeId: string) {
   return guarded(async () => {
-    const { charge, membership } = await loadCharge(chargeId);
+    const { charge, membership, user } = await loadCharge(chargeId);
     if (charge.membershipId !== membership.id) throw new ForbiddenError("Esta cobrança não é sua.");
     if (charge.status !== "PENDING") return { error: "Esta cobrança não está pendente." };
 
     await db.charge.update({ where: { id: chargeId }, data: { status: "REPORTED", reportedAt: new Date() } });
+    await logActivity({
+      patotaId: charge.patotaId,
+      actorId: membership.id,
+      message: `${memberName({ ...membership, user })} avisou que pagou: ${charge.description} (${formatMoney(charge.amountCents)})`,
+      href: `/patotas/${charge.patotaId}/financeiro`,
+      managersOnly: true,
+    });
     refresh(charge.patotaId);
     return { ok: true, message: "Avisamos o organizador. O pagamento aparece como pago depois que ele confirmar." };
   });

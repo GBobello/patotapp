@@ -1,4 +1,4 @@
-import { LinkBox } from "@/components/links";
+import { LinkBox, NotificationsLink } from "@/components/links";
 import AppBar from "@mui/material/AppBar";
 import Container from "@mui/material/Container";
 import Link from "@mui/material/Link";
@@ -6,11 +6,13 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import SportsSoccerIcon from "@mui/icons-material/SportsSoccer";
 import { AccountMenu } from "@/components/account-menu";
+import { unreadNotificationCount } from "@/server/notifications";
 import { requireUser } from "@/server/session";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await requireUser();
   const displayName = user.nickname ?? user.name ?? user.email;
+  const unread = await unreadNotificationCount(user.id, user.notificationsSeenAt);
 
   return (
     <>
@@ -42,6 +44,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
               PatotApp
             </Typography>
           </LinkBox>
+          <NotificationsLink unread={unread} />
           <AccountMenu displayName={displayName} image={user.image} />
         </Toolbar>
       </AppBar>

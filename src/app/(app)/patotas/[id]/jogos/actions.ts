@@ -6,14 +6,15 @@ import { z } from "zod";
 import { RESPONSES, checkCanRespond, initialStatus } from "@/domain/attendance";
 import { formatGameDate, fromLocalDateTime, toLocalParts } from "@/domain/dates";
 import { DrawError, drawTeams } from "@/domain/draw";
-import { memberPositions } from "@/domain/members";
+import { memberName, memberPositions } from "@/domain/members";
 import { canManage } from "@/domain/roles";
 import { type StoredDraw, TEAM_NAMES, moveMember, parseStoredDraw } from "@/domain/teams";
 import { type ActionResult, emptyToNull, fieldErrorsFrom, formValues } from "@/lib/forms";
 import { db } from "@/server/db";
 import { requireGame, withGameLock } from "@/server/games";
+import { logActivity } from "@/server/activity";
 import { guarded } from "@/server/guard";
-import { ForbiddenError, requireManager } from "@/server/patotas";
+import { ForbiddenError, requireManager, requireMember } from "@/server/patotas";
 
 const HOUR = 60 * 60 * 1000;
 
@@ -88,6 +89,11 @@ export async function createGame(patotaId: string, _prev: ActionResult, formData
       });
     }
 
+    await logActivity({
+      patotaId,
+      message: `Novo jogo marcado: ${formatGameDate(startsAt)}`,
+      href: `/patotas/${patotaId}/jogos/${game.id}`,
+    });
     refreshPatota(patotaId);
     redirect(`/patotas/${patotaId}/jogos/${game.id}`);
   });
@@ -96,29 +102,45 @@ export async function createGame(patotaId: string, _prev: ActionResult, formData
 /** RF18: o próprio jogador confirma, marca talvez ou recusa. */
 export async function respond(gameId: string, wanted: string) {
   return guarded(async () => {
-    const { game, membership } = await requireGame(gameId);
+    const { game, membership, user } = await requireGame(gameId);
     const response = z.enum(RESPONSES).parse(wanted);
 
     const blocked = checkCanRespond({ ...game, isManager: canManage(membership.role) });
     if (blocked) return { error: blocked };
 
-    await withGameLock(gameId, async (tx) => {
+    const changed = await withGameLock(gameId, async (tx) => {
       const current = await tx.attendance.findUnique({
         where: { gameId_membershipId: { gameId, membershipId: membership.id } },
       });
       const status = initialStatus(response, current?.status ?? null);
-      if (current?.status === status) return;
+      if (current?.status === status) return false;
 
       await tx.attendance.upsert({
         where: { gameId_membershipId: { gameId, membershipId: membership.id } },
         create: { gameId, membershipId: membership.id, status },
         update: { status, statusChangedAt: new Date() },
       });
+      return true;
     });
 
     const mine = await db.attendance.findUniqueOrThrow({
       where: { gameId_membershipId: { gameId, membershipId: membership.id } },
     });
+    if (changed) {
+      const name = memberName({ ...membership, user });
+      const verbs = {
+        CONFIRMED: "confirmou presença",
+        WAITLIST: "entrou na lista de espera",
+        MAYBE: "marcou talvez",
+        DECLINED: "não vai",
+      } as const;
+      await logActivity({
+        patotaId: game.patotaId,
+        actorId: membership.id,
+        message: `${name} ${verbs[mine.status]} no jogo de ${formatGameDate(game.startsAt)}`,
+        href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+      });
+    }
     refreshPatota(game.patotaId);
 
     const waitingWindow =
@@ -170,8 +192,14 @@ export async function setAttendance(gameId: string, membershipId: string, wanted
 export async function cancelGame(gameId: string) {
   return guarded(async () => {
     const { game } = await requireGame(gameId);
-    await requireManager(game.patotaId);
+    const { membership } = await requireManager(game.patotaId);
     await db.game.update({ where: { id: gameId }, data: { status: "CANCELLED" } });
+    await logActivity({
+      patotaId: game.patotaId,
+      actorId: membership.id,
+      message: `Jogo de ${formatGameDate(game.startsAt)} foi cancelado`,
+      href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+    });
     refreshPatota(game.patotaId);
     return { ok: true, message: "Jogo cancelado." };
   });
@@ -225,6 +253,11 @@ export async function publishDraw(gameId: string) {
     if (!game.draw) return { error: "Sorteie os times primeiro." };
 
     await db.game.update({ where: { id: gameId }, data: { drawPublishedAt: new Date() } });
+    await logActivity({
+      patotaId: game.patotaId,
+      message: `Times do jogo de ${formatGameDate(game.startsAt)} publicados`,
+      href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+    });
     refreshPatota(game.patotaId);
     return { ok: true, message: "Times publicados para todos." };
   });
@@ -241,5 +274,44 @@ export async function moveDrawPlayer(gameId: string, membershipId: string, toTea
     await db.game.update({ where: { id: gameId }, data: { draw: moveMember(draw, membershipId, toTeam) } });
     revalidatePath(`/patotas/${game.patotaId}/jogos/${gameId}`);
     return { ok: true, message: `Jogador movido para o ${TEAM_NAMES[toTeam]}.` };
+  });
+}
+
+// ---------- Comentários do jogo (ciclo 7) ----------
+
+const commentSchema = z.object({
+  text: z.string().trim().min(1, "Escreva o comentário.").max(300, "Use no máximo 300 caracteres."),
+});
+
+/** RF47: qualquer integrante comenta no jogo. */
+export async function addGameComment(gameId: string, _prev: ActionResult, formData: FormData) {
+  return guarded(async () => {
+    const { game, membership, user } = await requireGame(gameId);
+    const parsed = commentSchema.safeParse({ text: formData.get("text") ?? "" });
+    if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed.error), values: formValues(formData) };
+
+    await db.gameComment.create({ data: { gameId, authorId: membership.id, text: parsed.data.text } });
+    await logActivity({
+      patotaId: game.patotaId,
+      actorId: membership.id,
+      message: `${memberName({ ...membership, user })} comentou no jogo de ${formatGameDate(game.startsAt)}: “${parsed.data.text.slice(0, 60)}”`,
+      href: `/patotas/${game.patotaId}/jogos/${gameId}#comentarios`,
+    });
+    revalidatePath(`/patotas/${game.patotaId}/jogos/${gameId}`);
+    return { ok: true };
+  });
+}
+
+/** O autor ou um organizador apaga o comentário. */
+export async function deleteGameComment(commentId: string) {
+  return guarded(async () => {
+    const comment = await db.gameComment.findUnique({ where: { id: commentId }, include: { game: true } });
+    if (!comment) return { error: "Comentário não encontrado." };
+    const { membership } = await requireMember(comment.game.patotaId);
+    if (comment.authorId !== membership.id && !canManage(membership.role)) throw new ForbiddenError();
+
+    await db.gameComment.delete({ where: { id: commentId } });
+    revalidatePath(`/patotas/${comment.game.patotaId}/jogos/${comment.gameId}`);
+    return { ok: true, message: "Comentário apagado." };
   });
 }

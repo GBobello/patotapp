@@ -2,7 +2,10 @@ import "server-only";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { promotions } from "@/domain/attendance";
+import { formatGameDate } from "@/domain/dates";
+import { memberName } from "@/domain/members";
 import type { Prisma } from "@/generated/prisma/client";
+import { logActivity } from "@/server/activity";
 import { db } from "@/server/db";
 import { requireMember } from "@/server/patotas";
 
@@ -38,7 +41,12 @@ export async function syncGameSpots(gameId: string) {
 async function fillSpots(tx: Tx, gameId: string) {
   const game = await tx.game.findUniqueOrThrow({
     where: { id: gameId },
-    include: { attendances: { where: { status: { in: ["CONFIRMED", "WAITLIST"] } }, include: { membership: true } } },
+    include: {
+      attendances: {
+        where: { status: { in: ["CONFIRMED", "WAITLIST"] } },
+        include: { membership: { include: { user: true } } },
+      },
+    },
   });
 
   const confirmedCount = game.attendances.filter((a) => a.status === "CONFIRMED").length;
@@ -60,6 +68,17 @@ async function fillSpots(tx: Tx, gameId: string) {
       where: { gameId, membershipId: { in: ids } },
       data: { status: "CONFIRMED", statusChangedAt: new Date() },
     });
+    for (const a of game.attendances.filter((x) => ids.includes(x.membershipId))) {
+      await logActivity(
+        {
+          // Sem autor: assim a própria pessoa promovida também recebe a notificação.
+          patotaId: game.patotaId,
+          message: `${memberName(a.membership)} saiu da lista de espera e está confirmado no jogo de ${formatGameDate(game.startsAt)}`,
+          href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+        },
+        tx,
+      );
+    }
   }
   return ids;
 }

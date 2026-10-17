@@ -20,17 +20,19 @@ enum Position {
 }
 
 model User {
-  id                 String     @id @default(cuid())
-  name               String?
-  email              String     @unique
-  emailVerified      DateTime?
-  image              String?
-  nickname           String?
-  phone              String?
-  primaryPosition    Position?
-  secondaryPositions Position[]
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  id                  String     @id @default(cuid())
+  name                String?
+  email               String     @unique
+  emailVerified       DateTime?
+  image               String?
+  nickname            String?
+  phone               String?
+  primaryPosition     Position?
+  secondaryPositions  Position[]
+  /// Até quando o usuário já viu as notificações (RF48).
+  notificationsSeenAt DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   accounts    Account[]
   sessions    Session[]
@@ -85,10 +87,12 @@ model Patota {
   /// Goleiros não pagam (RF44).
   keeperExempt     Boolean     @default(false)
 
-  memberships Membership[]
-  games       Game[]
-  charges     Charge[]
-  expenses    Expense[]
+  memberships   Membership[]
+  games         Game[]
+  charges       Charge[]
+  expenses      Expense[]
+  announcements Announcement[]
+  activities    Activity[]
 }
 
 // ---- Financeiro (ciclo 6) ----
@@ -157,10 +161,14 @@ model Membership {
   guestPosition Position?
   createdAt     DateTime   @default(now())
 
-  patota      Patota       @relation(fields: [patotaId], references: [id], onDelete: Cascade)
-  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  attendances Attendance[]
-  charges     Charge[]
+  patota        Patota                 @relation(fields: [patotaId], references: [id], onDelete: Cascade)
+  user          User?                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attendances   Attendance[]
+  charges       Charge[]
+  announcements Announcement[]         @relation("AnnouncementAuthor")
+  reactions     AnnouncementReaction[]
+  gameComments  GameComment[]          @relation("GameCommentAuthor")
+  activities    Activity[]             @relation("ActivityActor")
 
   @@unique([patotaId, userId])
   @@index([userId])
@@ -199,9 +207,10 @@ model Game {
   drawPublishedAt      DateTime?
   createdAt            DateTime   @default(now())
 
-  patota      Patota       @relation(fields: [patotaId], references: [id], onDelete: Cascade)
+  patota      Patota        @relation(fields: [patotaId], references: [id], onDelete: Cascade)
   attendances Attendance[]
   charges     Charge[]
+  comments    GameComment[]
 
   @@index([patotaId, startsAt])
 }
@@ -258,4 +267,69 @@ model VerificationToken {
   expires    DateTime
 
   @@id([identifier, token])
+}
+
+// ---- Comunicação e percepção (ciclo 7) ----
+
+/// Aviso no mural da patota (RF46).
+model Announcement {
+  id        String   @id @default(cuid())
+  patotaId  String
+  authorId  String?
+  text      String
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  patota    Patota                 @relation(fields: [patotaId], references: [id], onDelete: Cascade)
+  author    Membership?            @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  reactions AnnouncementReaction[]
+
+  @@index([patotaId, createdAt])
+}
+
+model AnnouncementReaction {
+  announcementId String
+  membershipId   String
+  emoji          String
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  membership   Membership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, membershipId, emoji])
+}
+
+/// Comentário no jogo, ex.: "vou atrasar 10 min" (RF47).
+model GameComment {
+  id        String   @id @default(cuid())
+  gameId    String
+  authorId  String?
+  text      String
+  createdAt DateTime @default(now())
+
+  game   Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  author Membership? @relation("GameCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([gameId, createdAt])
+}
+
+enum Audience {
+  ALL
+  MANAGERS
+}
+
+/// Linha do tempo da patota e base das notificações no app (RF48, RF49).
+model Activity {
+  id        String   @id @default(cuid())
+  patotaId  String
+  actorId   String?
+  message   String
+  href      String?
+  /// Pagamentos só aparecem para organizadores.
+  audience  Audience @default(ALL)
+  createdAt DateTime @default(now())
+
+  patota Patota      @relation(fields: [patotaId], references: [id], onDelete: Cascade)
+  actor  Membership? @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([patotaId, createdAt])
 }

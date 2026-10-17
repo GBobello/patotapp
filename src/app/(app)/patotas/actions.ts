@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { extractInviteCode, generateInviteCode } from "@/domain/roles";
 import { type ActionResult, fieldErrorsFrom, formValues } from "@/lib/forms";
 import { parsePatotaForm } from "@/lib/schemas";
+import { memberName } from "@/domain/members";
+import { logActivity } from "@/server/activity";
 import { db } from "@/server/db";
 import { requireUser } from "@/server/session";
 
@@ -41,11 +43,18 @@ export async function acceptInvite(code: string): Promise<ActionResult> {
   const patota = await db.patota.findUnique({ where: { inviteCode: code } });
   if (!patota) return { error: "Convite inválido ou substituído por um novo. Peça o link atualizado ao organizador." };
 
-  await db.membership.upsert({
+  const existing = await db.membership.findUnique({
     where: { patotaId_userId: { patotaId: patota.id, userId: user.id } },
-    create: { patotaId: patota.id, userId: user.id },
-    update: {},
   });
+  if (!existing) {
+    const membership = await db.membership.create({ data: { patotaId: patota.id, userId: user.id } });
+    await logActivity({
+      patotaId: patota.id,
+      actorId: membership.id,
+      message: `${memberName({ ...membership, user })} entrou na patota`,
+      href: `/patotas/${patota.id}/membros`,
+    });
+  }
 
   revalidatePath("/");
   redirect(`/patotas/${patota.id}`);
