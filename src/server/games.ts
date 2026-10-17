@@ -75,6 +75,8 @@ async function fillSpots(tx: Tx, gameId: string) {
           patotaId: game.patotaId,
           message: `${memberName(a.membership)} saiu da lista de espera e está confirmado no jogo de ${formatGameDate(game.startsAt)}`,
           href: `/patotas/${game.patotaId}/jogos/${gameId}`,
+          // O push vai só para quem foi promovido; o resto da patota vê no app.
+          push: { only: [a.membershipId] },
         },
         tx,
       );

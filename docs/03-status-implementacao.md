@@ -55,7 +55,7 @@ Legenda: ✅ implementado e testado · 🟡 parcial · ⬜ não implementado (pr
 | RF45 | Exportar relatório | ✅ | CSV que abre no Excel |
 | RF46 | Mural de avisos | ✅ | Fixar, excluir, reações |
 | RF47 | Comentários no jogo | ✅ | |
-| RF48 | Notificações | 🟡 | No app (sino com contador). Push e e-mail ainda não |
+| RF48 | Notificações | ✅ | No app (sino com contador); push no PWA, ativado por aparelho em Meu perfil, para jogo novo, cancelamento, times publicados, promoção da lista de espera (só para quem foi promovido) e pagamentos (só organizadores), nunca para quem fez a ação; lembrete por e-mail até 24 h antes do prazo para quem não respondeu ou marcou talvez (`/api/cron/lembretes`, desligável no perfil) |
 | RF49 | Linha do tempo | ✅ | Aba Atividades |
 | RF50 | Painel com próximo jogo | ✅ | |
 | RF51 | Tarefas do jogo | ⬜ | |
@@ -84,14 +84,14 @@ Legenda: ✅ implementado e testado · 🟡 parcial · ⬜ não implementado (pr
 
 ## Testes realizados
 
-- **Unitários (Vitest):** `npm test` — 54 testes, incluindo 150 elencos aleatórios no sorteio.
-- **Fluxos no navegador:** login por link, convite, lista de espera com promoção, sorteio e publicação, cobranças (gerar, "já paguei", confirmar), despesas, CSV, mural, comentários, notificações, preferências e exclusão de conta.
+- **Unitários (Vitest):** `npm test` — 65 testes, incluindo 150 elencos aleatórios no sorteio.
+- **Fluxos no navegador:** login por link, convite, lista de espera com promoção, sorteio e publicação, cobranças (gerar, "já paguei", confirmar), despesas, CSV, mural, comentários, notificações (push e lembrete por e-mail), preferências e exclusão de conta.
 - **Acessibilidade:** axe-core (WCAG 2.1 A/AA) nos temas claro e escuro.
 
 ## Sugestões para as próximas versões
 
-1. Notificações push (Web Push) e por e-mail (RF48).
-2. Aprovação de entrada na patota (RF10).
-3. Regras "juntos/separados" no sorteio (RF33) e cores de colete (RF36).
-4. Placar, presença real e estatísticas (RF52, RF53).
-5. Deploy na Vercel + Neon e medição com Lighthouse (RNF21, RNF22).
+1. Aprovação de entrada na patota (RF10).
+2. Regras "juntos/separados" no sorteio (RF33) e cores de colete (RF36).
+3. Placar, presença real e estatísticas (RF52, RF53).
+4. Deploy na Vercel + Neon e medição com Lighthouse (RNF21, RNF22), com agendador horário para `/api/cron/lembretes`.
+5. Aviso de cobrança vencendo (RF48 cita como exemplo; hoje o financeiro avisa só organizadores).

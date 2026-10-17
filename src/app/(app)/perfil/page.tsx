@@ -6,8 +6,10 @@ import { cookies } from "next/headers";
 import { AccessibilityPreferences } from "@/components/accessibility-preferences";
 import { ActionButton } from "@/components/action-button";
 import { DeleteAccountForm } from "@/components/delete-account-form";
+import { NotificationPreferences } from "@/components/notification-preferences";
 import { logoutEverywhere } from "../actions";
 import { readPreferences } from "@/lib/preferences";
+import { vapidPublicKey } from "@/server/push";
 import { requireUser } from "@/server/session";
 import { ProfileForm } from "./profile-form";
 
@@ -36,6 +38,13 @@ export default async function ProfilePage() {
             secondaryPositions: user.secondaryPositions,
           }}
         />
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }} component="section" aria-labelledby="notificacoes">
+        <Typography id="notificacoes" variant="h6" component="h2" gutterBottom>
+          Notificações
+        </Typography>
+        <NotificationPreferences vapidKey={vapidPublicKey()} emailReminders={user.emailReminders} />
       </Paper>
 
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }} component="section" aria-labelledby="acessibilidade">
