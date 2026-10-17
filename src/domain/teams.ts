@@ -5,6 +5,14 @@ import { POSITIONS, POSITION_LABELS, type Position } from "./positions";
 
 export const TEAM_NAMES = ["Time A", "Time B", "Time C", "Time D", "Time E", "Time F"] as const;
 
+/** Quantos times podem ter nome personalizado (máximo de times por jogo). */
+export const MAX_TEAM_NAMES = 6;
+
+/** RF36: nome do time — o colete definido pela patota (ex.: "Colete laranja") ou Time A, B… */
+export function teamName(index: number, custom: readonly string[] = []) {
+  return custom[index]?.trim() || TEAM_NAMES[index] || `Time ${index + 1}`;
+}
+
 const storedDrawSchema = z.object({
   teams: z.array(
     z.object({

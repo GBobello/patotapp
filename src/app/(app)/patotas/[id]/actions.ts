@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { memberName } from "@/domain/members";
 import { POSITIONS } from "@/domain/positions";
+import { MAX_TEAM_NAMES } from "@/domain/teams";
 import { MEMBER_TYPES, ROLES, checkOrganizerRemains, generateInviteCode } from "@/domain/roles";
 import { type ActionResult, fieldErrorsFrom, formValues } from "@/lib/forms";
 import { parsePatotaForm } from "@/lib/schemas";
@@ -233,5 +234,72 @@ export async function rejectMember(patotaId: string, membershipId: string) {
     await db.membership.delete({ where: { id: membershipId } });
     refresh(patotaId);
     return { ok: true, message: `Pedido de ${memberName(member)} recusado.` };
+  });
+}
+
+// ---------- Times: coletes e regras do sorteio (RF33, RF36) ----------
+
+/** RF36: nome/colete de cada time (ex.: "Colete laranja", "Sem colete"). */
+export async function updateTeamNames(patotaId: string, _prev: ActionResult, formData: FormData) {
+  return guarded(async () => {
+    await requireManager(patotaId);
+    const names = Array.from({ length: MAX_TEAM_NAMES }, (_, i) => String(formData.get(`team:${i}`) ?? "").trim());
+    const tooLong = names.findIndex((n) => n.length > 30);
+    if (tooLong >= 0) {
+      return { fieldErrors: { [`team:${tooLong}`]: "Use no máximo 30 caracteres." }, values: formValues(formData) };
+    }
+    // Remove os vazios do fim, mantendo a posição de cada time.
+    while (names.length && !names[names.length - 1]) names.pop();
+
+    await db.patota.update({ where: { id: patotaId }, data: { teamNames: names } });
+    refresh(patotaId);
+    return { ok: true, message: "Nomes dos times salvos." };
+  });
+}
+
+const ruleSchema = z.object({
+  kind: z.enum(["TOGETHER", "APART"], "Escolha o tipo de regra."),
+  firstId: z.string().min(1, "Escolha a primeira pessoa."),
+  secondId: z.string().min(1, "Escolha a segunda pessoa."),
+});
+
+/** RF33: regra permanente "sempre juntos" ou "sempre separados" no sorteio. */
+export async function addDrawRule(patotaId: string, _prev: ActionResult, formData: FormData) {
+  return guarded(async () => {
+    await requireManager(patotaId);
+    const parsed = ruleSchema.safeParse({
+      kind: formData.get("kind") || undefined,
+      firstId: formData.get("firstId") ?? "",
+      secondId: formData.get("secondId") ?? "",
+    });
+    if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed.error), values: formValues(formData) };
+    const { kind } = parsed.data;
+    if (parsed.data.firstId === parsed.data.secondId) {
+      return { fieldErrors: { secondId: "Escolha duas pessoas diferentes." }, values: formValues(formData) };
+    }
+
+    const [a, b] = await Promise.all([
+      findMember(patotaId, parsed.data.firstId),
+      findMember(patotaId, parsed.data.secondId),
+    ]);
+    // Par em ordem fixa: uma regra por dupla, seja qual for a ordem escolhida.
+    const [firstId, secondId] = [a.id, b.id].sort();
+
+    await db.drawRule.upsert({
+      where: { patotaId_firstId_secondId: { patotaId, firstId, secondId } },
+      create: { patotaId, firstId, secondId, kind },
+      update: { kind },
+    });
+    refresh(patotaId);
+    return { ok: true, message: kind === "TOGETHER" ? "Regra salva: sempre no mesmo time." : "Regra salva: sempre em times diferentes." };
+  });
+}
+
+export async function deleteDrawRule(patotaId: string, ruleId: string) {
+  return guarded(async () => {
+    await requireManager(patotaId);
+    await db.drawRule.deleteMany({ where: { id: ruleId, patotaId } });
+    refresh(patotaId);
+    return { ok: true, message: "Regra removida." };
   });
 }

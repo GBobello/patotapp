@@ -76,17 +76,21 @@ model Patota {
   defaultWeekday       Int?
   /// Horário no formato HH:MM (horário de Brasília).
   defaultTime          String?
-  defaultMaxPlayers    Int     @default(14)
-  defaultTeamsCount    Int     @default(2)
+  defaultMaxPlayers    Int      @default(14)
+  defaultTeamsCount    Int      @default(2)
   /// Quantas horas antes do jogo a confirmação fecha.
-  defaultDeadlineHours Int     @default(3)
+  defaultDeadlineHours Int      @default(3)
   /// Prioridade dos mensalistas (RF19): diaristas só ocupam vagas X horas antes do jogo.
   /// null = diaristas podem confirmar desde o início.
   diaristaWindowHours  Int?
   /// RF10: quem entra pelo link precisa ser aprovado por um organizador.
-  requireApproval      Boolean @default(false)
+  requireApproval      Boolean  @default(false)
   /// RF16: cria o próximo jogo semanal sozinho quando não há jogo marcado.
-  autoCreateGames      Boolean @default(true)
+  autoCreateGames      Boolean  @default(true)
+  /// RF36: nome/colete de cada time no sorteio (ex.: "Colete laranja"). Vazio = Time A, B…
+  teamNames            String[] @default([])
+  /// RF28: jogadores avaliam uns aos outros; a nota usada no sorteio mistura com a do organizador.
+  peerRatingEnabled    Boolean  @default(false)
 
   // Financeiro (ciclo 6). Valores em centavos.
   billingMode      BillingMode @default(FIXED_MONTHLY)
@@ -106,6 +110,7 @@ model Patota {
   expenses      Expense[]
   announcements Announcement[]
   activities    Activity[]
+  drawRules     DrawRule[]
 }
 
 // ---- Financeiro (ciclo 6) ----
@@ -183,6 +188,11 @@ model Membership {
   reactions     AnnouncementReaction[]
   gameComments  GameComment[]          @relation("GameCommentAuthor")
   activities    Activity[]             @relation("ActivityActor")
+  drawRulesA    DrawRule[]             @relation("DrawRuleFirst")
+  drawRulesB    DrawRule[]             @relation("DrawRuleSecond")
+  tasks         GameTask[]             @relation("GameTaskAssignee")
+  ratingsGiven  PeerRating[]           @relation("PeerRatingRater")
+  ratingsGot    PeerRating[]           @relation("PeerRatingRatee")
 
   @@unique([patotaId, userId])
   @@index([userId])
@@ -231,6 +241,7 @@ model Game {
   attendances Attendance[]
   charges     Charge[]
   comments    GameComment[]
+  tasks       GameTask[]
 
   /// Evita jogos duplicados no mesmo horário (inclusive na criação automática).
   @@unique([patotaId, startsAt])
@@ -371,4 +382,55 @@ model PushSubscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ---- Requisitos opcionais ----
+
+enum DrawRuleKind {
+  TOGETHER
+  APART
+}
+
+/// RF33: regra permanente do sorteio entre dois integrantes.
+model DrawRule {
+  id        String       @id @default(cuid())
+  patotaId  String
+  kind      DrawRuleKind
+  firstId   String
+  secondId  String
+  createdAt DateTime     @default(now())
+
+  patota Patota     @relation(fields: [patotaId], references: [id], onDelete: Cascade)
+  first  Membership @relation("DrawRuleFirst", fields: [firstId], references: [id], onDelete: Cascade)
+  second Membership @relation("DrawRuleSecond", fields: [secondId], references: [id], onDelete: Cascade)
+
+  @@unique([patotaId, firstId, secondId])
+}
+
+/// RF51: tarefa do jogo (levar bola, coletes, água…) que qualquer integrante assume.
+model GameTask {
+  id         String   @id @default(cuid())
+  gameId     String
+  title      String
+  assigneeId String?
+  createdAt  DateTime @default(now())
+
+  game     Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  assignee Membership? @relation("GameTaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([gameId])
+}
+
+/// RF28: nota que um integrante dá a outro (secreta; só a média é usada).
+model PeerRating {
+  raterId   String
+  rateeId   String
+  rating    Int
+  updatedAt DateTime @updatedAt
+
+  rater Membership @relation("PeerRatingRater", fields: [raterId], references: [id], onDelete: Cascade)
+  ratee Membership @relation("PeerRatingRatee", fields: [rateeId], references: [id], onDelete: Cascade)
+
+  @@id([raterId, rateeId])
+  @@index([rateeId])
 }

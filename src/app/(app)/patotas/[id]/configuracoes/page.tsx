@@ -4,6 +4,8 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { ApprovalSwitch } from "@/components/approval-switch";
+import { DrawRulesForm, TeamNamesForm } from "@/components/team-settings";
+import { memberName } from "@/domain/members";
 import { BillingSettingsForm } from "@/components/billing-settings-form";
 import { DeletePatotaForm } from "@/components/delete-patota-form";
 import { GameRulesForm } from "@/components/game-rules-form";
@@ -21,7 +23,18 @@ export default async function PatotaSettingsPage({ params }: PageProps<"/patotas
   const { id } = await params;
   const { patota, membership } = await requireMember(id);
   if (!canManage(membership.role)) notFound();
-  const mensalistas = await db.membership.count({ where: { patotaId: id, type: "MENSALISTA", status: "ACTIVE" } });
+  const [mensalistas, members, rules] = await Promise.all([
+    db.membership.count({ where: { patotaId: id, type: "MENSALISTA", status: "ACTIVE" } }),
+    db.membership.findMany({ where: { patotaId: id, status: "ACTIVE" }, include: { user: true } }),
+    db.drawRule.findMany({
+      where: { patotaId: id },
+      include: { first: { include: { user: true } }, second: { include: { user: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+  const memberOptions = members
+    .map((m) => ({ id: m.id, name: memberName(m) }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   return (
     <Stack spacing={3}>
@@ -42,6 +55,24 @@ export default async function PatotaSettingsPage({ params }: PageProps<"/patotas
         </Typography>
         <GameRulesForm action={updateGameRules.bind(null, id)} diaristaWindowHours={patota.diaristaWindowHours}
           autoCreateGames={patota.autoCreateGames}
+        />
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }} component="section" aria-labelledby="times-coletes">
+        <Typography id="times-coletes" variant="h6" component="h2" gutterBottom>
+          Nomes dos times (coletes)
+        </Typography>
+        <TeamNamesForm patotaId={id} initial={patota.teamNames} />
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }} component="section" aria-labelledby="regras-sorteio">
+        <Typography id="regras-sorteio" variant="h6" component="h2" gutterBottom>
+          Regras do sorteio
+        </Typography>
+        <DrawRulesForm
+          patotaId={id}
+          members={memberOptions}
+          rules={rules.map((r) => ({ id: r.id, kind: r.kind, first: memberName(r.first), second: memberName(r.second) }))}
         />
       </Paper>
 

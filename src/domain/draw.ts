@@ -30,6 +30,8 @@ export type DrawResult = {
   teams: DrawTeam[];
   /** Diferença entre a maior e a menor soma de notas. */
   spread: number;
+  /** Regras juntos/separados que não puderam ser cumpridas. */
+  violations: number;
   warnings: string[];
 };
 
@@ -38,7 +40,16 @@ export type DrawOptions = {
   /** Gerador aleatório em [0, 1) — injetável para testes determinísticos. */
   random?: () => number;
   attempts?: number;
+  /** RF33: pares que devem ficar no mesmo time (ex.: pai e filho que vão juntos de carro). */
+  together?: [string, string][];
+  /** RF33: pares que devem ficar em times diferentes (ex.: os dois melhores goleiros). */
+  apart?: [string, string][];
 };
+
+type Constraints = { together: [string, string][]; apart: [string, string][] };
+
+/** Peso de uma regra descumprida: qualquer regra vale mais que toda a diferença de notas. */
+const VIOLATION_COST = 10_000;
 
 const GROUP_ORDER: (Position | null)[] = ["GOL", "ZAG", "LAT", "MEI", "ATA", null];
 
@@ -46,6 +57,10 @@ export class DrawError extends Error {}
 
 export function drawTeams(players: DrawPlayer[], options: DrawOptions): DrawResult {
   const { teamsCount, random = Math.random, attempts = 60 } = options;
+  const present = new Set(players.map((p) => p.id));
+  // Regras só valem quando as duas pessoas estão confirmadas.
+  const relevant = (pairs: [string, string][] = []) => pairs.filter(([a, b]) => a !== b && present.has(a) && present.has(b));
+  const constraints: Constraints = { together: relevant(options.together), apart: relevant(options.apart) };
 
   if (teamsCount < 2) throw new DrawError("O sorteio precisa de pelo menos 2 times.");
   if (players.length < teamsCount * 2) {
@@ -55,14 +70,28 @@ export function drawTeams(players: DrawPlayer[], options: DrawOptions): DrawResu
   const { assigned, warnings } = assignRoles(players, teamsCount);
 
   let best: DrawResult[] = [];
+  let bestCost = Infinity;
   for (let i = 0; i < attempts; i++) {
-    const teams = improve(distribute(assigned, teamsCount, random));
-    const result = { teams, spread: spreadOf(teams), warnings };
-    if (!best.length || result.spread < best[0].spread) best = [result];
-    else if (result.spread === best[0].spread) best.push(result);
+    const teams = improve(distribute(assigned, teamsCount, random), constraints);
+    const violations = countViolations(teams, constraints);
+    const result = { teams, spread: spreadOf(teams), violations, warnings };
+    const c = cost(teams, constraints);
+    if (c < bestCost) {
+      best = [result];
+      bestCost = c;
+    } else if (c === bestCost) best.push(result);
   }
 
-  return best[Math.floor(random() * best.length)];
+  const chosen = best[Math.floor(random() * best.length)];
+  if (chosen.violations > 0) {
+    chosen.warnings = [
+      ...warnings,
+      chosen.violations === 1
+        ? "Uma regra de juntos/separados não pôde ser cumprida sem desequilibrar as posições."
+        : `${chosen.violations} regras de juntos/separados não puderam ser cumpridas sem desequilibrar as posições.`,
+    ];
+  }
+  return chosen;
 }
 
 /**
@@ -91,7 +120,43 @@ export function assignRoles(players: DrawPlayer[], teamsCount: number) {
         : `Faltam ${missing} goleiros: ${missing} times vão começar sem goleiro fixo.`,
     );
   }
+
+  fillLinePositions(assigned, teamsCount);
   return { assigned, warnings };
+}
+
+const LINE_ROLES: Position[] = ["ZAG", "LAT", "MEI", "ATA"];
+
+/**
+ * RF32: se uma posição de linha tem menos jogadores que times (algum time ficaria sem ela),
+ * completa com quem joga essa posição como secundária — vindo de uma posição que tem sobra —
+ * ou com quem não cadastrou posição. Assim nenhum time fica sem zagueiro enquanto houver
+ * alguém que possa jogar ali.
+ */
+export function fillLinePositions(assigned: DrawnPlayer[], teamsCount: number) {
+  const count = (role: Position | null) => assigned.filter((p) => p.role === role).length;
+  // Só completa posições que alguém do grupo realmente joga (como principal ou secundária).
+  const wanted = LINE_ROLES.filter((r) => assigned.some((p) => p.primary === r || p.secondary.includes(r)));
+
+  for (const role of wanted) {
+    while (count(role) < teamsCount) {
+      const donors = assigned
+        .filter((p) => {
+          if (p.role === role || p.role === "GOL") return false;
+          if (p.role === null) return true; // sem posição cadastrada: pode completar
+          // Só tira de uma posição que continua cobrindo todos os times.
+          return p.secondary.includes(role) && count(p.role) > teamsCount;
+        })
+        // Prefere quem joga a posição como secundária, depois quem está na posição com mais sobra.
+        .sort(
+          (a, b) =>
+            Number(b.secondary.includes(role)) - Number(a.secondary.includes(role)) ||
+            count(b.role) - count(a.role),
+        );
+      if (!donors.length) break;
+      donors[0].role = role;
+    }
+  }
 }
 
 function distribute(players: DrawnPlayer[], teamsCount: number, random: () => number): DrawTeam[] {
@@ -127,13 +192,13 @@ function distribute(players: DrawnPlayer[], teamsCount: number, random: () => nu
  * Trocar posições diferentes é permitido quando cada posição continua com diferença ≤ 1
  * (ex.: com 7 jogadores, o craque pode ir para o time que tem um jogador a menos).
  */
-function improve(teams: DrawTeam[]): DrawTeam[] {
+function improve(teams: DrawTeam[], constraints: Constraints): DrawTeam[] {
   let improved = true;
   let guard = 0;
 
   while (improved && guard++ < 500) {
     improved = false;
-    const current = spreadOf(teams);
+    const current = cost(teams, constraints);
 
     outer: for (let a = 0; a < teams.length; a++) {
       for (let b = 0; b < teams.length; b++) {
@@ -145,7 +210,7 @@ function improve(teams: DrawTeam[]): DrawTeam[] {
           // Mover (só do time maior para o menor, mantendo tamanhos com diferença ≤ 1).
           if (ta.players.length > tb.players.length) {
             move(ta, pa, tb);
-            if (isBalanced(teams) && spreadOf(teams) < current) {
+            if (isBalanced(teams) && cost(teams, constraints) < current) {
               improved = true;
               break outer;
             }
@@ -155,9 +220,8 @@ function improve(teams: DrawTeam[]): DrawTeam[] {
           // Trocar.
           if (a > b) continue; // cada par de times uma vez
           for (const pb of [...tb.players]) {
-            if (pa.rating === pb.rating) continue;
             swap(ta, pa, tb, pb);
-            if ((pa.role === pb.role || isBalanced(teams)) && spreadOf(teams) < current) {
+            if ((pa.role === pb.role || isBalanced(teams)) && cost(teams, constraints) < current) {
               improved = true;
               break outer;
             }
@@ -182,6 +246,22 @@ function move(from: DrawTeam, player: DrawnPlayer, to: DrawTeam) {
   to.players.push(player);
   from.total -= player.rating;
   to.total += player.rating;
+}
+
+/** Regras juntos/separados descumpridas. */
+function countViolations(teams: DrawTeam[], { together, apart }: Constraints) {
+  if (!together.length && !apart.length) return 0;
+  const teamOf = new Map<string, number>();
+  teams.forEach((t, i) => t.players.forEach((p) => teamOf.set(p.id, i)));
+  return (
+    together.filter(([a, b]) => teamOf.get(a) !== teamOf.get(b)).length +
+    apart.filter(([a, b]) => teamOf.get(a) === teamOf.get(b)).length
+  );
+}
+
+/** O que a busca minimiza: primeiro cumprir as regras, depois equilibrar as notas. */
+function cost(teams: DrawTeam[], constraints: Constraints) {
+  return countViolations(teams, constraints) * VIOLATION_COST + spreadOf(teams);
 }
 
 /** RN06: tamanhos e cada posição com diferença máxima de 1 entre os times. */

@@ -13,7 +13,7 @@ import CasinoIcon from "@mui/icons-material/Casino";
 import { drawGameTeams, publishDraw } from "@/app/(app)/patotas/[id]/jogos/actions";
 import { spreadOf } from "@/domain/draw";
 import { POSITION_LABELS, type Position } from "@/domain/positions";
-import { TEAM_NAMES, teamsMessage, type StoredDraw } from "@/domain/teams";
+import { teamName, teamsMessage, type StoredDraw } from "@/domain/teams";
 import { ActionButton } from "./action-button";
 import { MovePlayerMenu } from "./move-player-menu";
 import { CopyButton, WhatsAppButton } from "./share-buttons";
@@ -29,6 +29,8 @@ type Props = {
   teamsCount: number;
   confirmedIds: string[];
   members: Map<string, TeamMemberInfo>;
+  /** RF36: nomes/coletes definidos pela patota. */
+  teamNames?: string[];
 };
 
 function balanceLabel(spread: number) {
@@ -38,7 +40,17 @@ function balanceLabel(spread: number) {
 }
 
 /** Seção de times do jogo: sorteio, indicador de equilíbrio, ajustes e publicação (RF29–RF35). */
-export function TeamsSection({ gameId, title, draw, published, manager, teamsCount, confirmedIds, members }: Props) {
+export function TeamsSection({
+  gameId,
+  title,
+  draw,
+  published,
+  manager,
+  teamsCount,
+  confirmedIds,
+  members,
+  teamNames = [],
+}: Props) {
   if (!manager && !published) {
     return (
       <Paper variant="outlined" sx={{ p: 2 }} component="section" aria-labelledby="times-titulo">
@@ -62,7 +74,7 @@ export function TeamsSection({ gameId, title, draw, published, manager, teamsCou
         improvised: m.role !== null && info?.primary !== m.role,
       };
     });
-    return { name: TEAM_NAMES[i], players, total: players.reduce((s, p) => s + p.rating, 0) };
+    return { name: teamName(i, teamNames), players, total: players.reduce((s, p) => s + p.rating, 0) };
   });
 
   const drawnIds = new Set(teams.flatMap((t) => t.players.map((p) => p.membershipId)));
@@ -102,6 +114,13 @@ export function TeamsSection({ gameId, title, draw, published, manager, teamsCou
         </Alert>
       )}
 
+      {teams.length > 2 && (
+        <Alert severity="info" icon={false}>
+          Com {teams.length} times: <strong>{teams[0].name}</strong> e <strong>{teams[1].name}</strong> começam jogando; os
+          outros ficam de fora e entram, na ordem, no lugar de quem perder.
+        </Alert>
+      )}
+
       {teams.length > 0 && (
         <Grid container spacing={2}>
           {teams.map((team, ti) => (
@@ -112,6 +131,13 @@ export function TeamsSection({ gameId, title, draw, published, manager, teamsCou
                     <Typography id={`time-${ti}`} variant="subtitle1" component="h4" sx={{ fontWeight: 700 }}>
                       {team.name}
                     </Typography>
+                    {teams.length > 2 && (
+                      <Chip
+                        size="small"
+                        variant={ti < 2 ? "filled" : "outlined"}
+                        label={ti < 2 ? "Começa jogando" : `De fora (${ti - 1}º a entrar)`}
+                      />
+                    )}
                     {manager && (
                       <Typography variant="body2" color="text.secondary">
                         Soma {team.total} · média {(team.total / Math.max(1, team.players.length)).toFixed(1)}

@@ -115,6 +115,62 @@ describe("drawTeams — propriedades em elencos aleatórios", () => {
   });
 });
 
+describe("drawTeams — posições secundárias (RF32)", () => {
+  it("completa a zaga com quem joga de zagueiro como secundária", () => {
+    const players = [p("GOL"), p("GOL"), p("ZAG"), p("MEI", 3, ["ZAG"]), p("MEI"), p("MEI"), p("ATA"), p("ATA")];
+    const r = drawTeams(players, { teamsCount: 2, random: seededRandom(11) });
+    for (const team of r.teams) expect(positionCounts(team).ZAG).toBe(1);
+    const improvised = r.teams.flatMap((t) => t.players).find((x) => x.primary === "MEI" && x.role === "ZAG");
+    expect(improvised).toBeDefined();
+  });
+
+  it("não desfalca uma posição que só cobre os times na conta", () => {
+    // 2 meias para 2 times: o meia que também joga de zagueiro precisa continuar meia.
+    const players = [p("GOL"), p("GOL"), p("ZAG"), p("MEI", 3, ["ZAG"]), p("MEI"), p("ATA"), p("ATA"), p("ATA")];
+    const r = drawTeams(players, { teamsCount: 2, random: seededRandom(12) });
+    for (const team of r.teams) expect(positionCounts(team).MEI).toBe(1);
+  });
+});
+
+describe("drawTeams — juntos e separados (RF33)", () => {
+  const roster = () => [p("GOL", 3), p("GOL", 3), ...many(4, "ZAG", 3), ...many(4, "MEI", 3), ...many(4, "ATA", 3)];
+
+  it("mantém juntos quem pediu para jogar junto", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const players = roster();
+      const [a, b] = [players[2].id, players[10].id]; // um zagueiro e um atacante
+      const r = drawTeams(players, { teamsCount: 2, random: seededRandom(seed), together: [[a, b]] });
+      const teamOf = (id: string) => r.teams.findIndex((t) => t.players.some((x) => x.id === id));
+      expect(teamOf(a)).toBe(teamOf(b));
+      expect(r.violations).toBe(0);
+    }
+  });
+
+  it("separa quem precisa ficar em times diferentes", () => {
+    for (const seed of [6, 7, 8]) {
+      const players = roster();
+      const [a, b] = [players[6].id, players[7].id]; // dois meias
+      const r = drawTeams(players, { teamsCount: 2, random: seededRandom(seed), apart: [[a, b]] });
+      const teamOf = (id: string) => r.teams.findIndex((t) => t.players.some((x) => x.id === id));
+      expect(teamOf(a)).not.toBe(teamOf(b));
+    }
+  });
+
+  it("avisa quando a regra é impossível sem quebrar as posições", () => {
+    const players = roster();
+    // Os dois goleiros juntos obrigaria um time sem goleiro: a regra de posição vence.
+    const r = drawTeams(players, { teamsCount: 2, random: seededRandom(9), together: [[players[0].id, players[1].id]] });
+    expect(r.violations).toBe(1);
+    expect(r.warnings.join(" ")).toMatch(/não pôde ser cumprida/);
+  });
+
+  it("ignora regras de quem não confirmou", () => {
+    const players = roster();
+    const r = drawTeams(players, { teamsCount: 2, random: seededRandom(10), together: [[players[2].id, "ausente"]] });
+    expect(r.violations).toBe(0);
+  });
+});
+
 describe("drawTeams — validações (RN04)", () => {
   it("exige pelo menos 2 jogadores por time", () => {
     expect(() => drawTeams(many(3, "MEI"), { teamsCount: 2 })).toThrow(DrawError);

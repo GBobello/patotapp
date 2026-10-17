@@ -18,7 +18,7 @@ import { formatGameDate, formatGameDateLong } from "@/domain/dates";
 import { canManage } from "@/domain/roles";
 import { memberImage, memberName, memberPositions } from "@/domain/members";
 import { gameListMessage } from "@/domain/share";
-import { TEAM_NAMES, parseStoredDraw } from "@/domain/teams";
+import { parseStoredDraw, teamName } from "@/domain/teams";
 import { db } from "@/server/db";
 import { requireGame, syncGameSpots } from "@/server/games";
 import { getOrigin } from "@/server/url";
@@ -152,6 +152,7 @@ export default async function GamePage({ params, searchParams }: PageProps<"/pat
           teamsCount={game.teamsCount}
           confirmedIds={byStatus("CONFIRMED").map((a) => a.membershipId)}
           members={teamMembers}
+          teamNames={patota.teamNames}
         />
       )}
 
@@ -204,7 +205,7 @@ export default async function GamePage({ params, searchParams }: PageProps<"/pat
           </Typography>
           {game.teamScores.length > 0 && (
             <Typography variant="h5" component="p" sx={{ my: 1 }}>
-              {game.teamScores.map((s, i) => `${TEAM_NAMES[i]} ${s}`).join(" × ")}
+              {game.teamScores.map((s, i) => `${teamName(i, patota.teamNames)} ${s}`).join(" × ")}
             </Typography>
           )}
           <Typography color="text.secondary">
@@ -221,7 +222,7 @@ export default async function GamePage({ params, searchParams }: PageProps<"/pat
           </Typography>
           <GameResultForm
             action={saveGameResult.bind(null, gameId)}
-            teamNames={(parseStoredDraw(game.draw)?.teams ?? []).map((_, i) => TEAM_NAMES[i])}
+            teamNames={(parseStoredDraw(game.draw)?.teams ?? []).map((_, i) => teamName(i, patota.teamNames))}
             scores={game.teamScores}
             players={attendances
               .filter((a) => a.status !== "DECLINED")

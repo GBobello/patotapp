@@ -9,7 +9,7 @@ import { DrawError, drawTeams } from "@/domain/draw";
 import { demotions, gameDeadlines } from "@/domain/games";
 import { memberName, memberPositions } from "@/domain/members";
 import { canManage } from "@/domain/roles";
-import { type StoredDraw, TEAM_NAMES, moveMember, parseStoredDraw } from "@/domain/teams";
+import { type StoredDraw, moveMember, parseStoredDraw, teamName } from "@/domain/teams";
 import { type ActionResult, emptyToNull, fieldErrorsFrom, formValues } from "@/lib/forms";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db";
@@ -297,10 +297,15 @@ export async function drawGameTeams(gameId: string) {
     await requireManager(game.patotaId);
     if (game.status === "CANCELLED") return { error: "Este jogo foi cancelado." };
 
-    const confirmed = await db.attendance.findMany({
-      where: { gameId, status: "CONFIRMED" },
-      include: { membership: { include: { user: true } } },
-    });
+    const [confirmed, rules] = await Promise.all([
+      db.attendance.findMany({
+        where: { gameId, status: "CONFIRMED" },
+        include: { membership: { include: { user: true } } },
+      }),
+      db.drawRule.findMany({ where: { patotaId: game.patotaId } }),
+    ]);
+    const pairs = (kind: "TOGETHER" | "APART") =>
+      rules.filter((r) => r.kind === kind).map((r) => [r.firstId, r.secondId] as [string, string]);
 
     try {
       const result = drawTeams(
@@ -309,7 +314,7 @@ export async function drawGameTeams(gameId: string) {
           rating: m.rating,
           ...memberPositions(m),
         })),
-        { teamsCount: game.teamsCount },
+        { teamsCount: game.teamsCount, together: pairs("TOGETHER"), apart: pairs("APART") },
       );
       const draw: StoredDraw = {
         teams: result.teams.map((t) => ({
@@ -351,14 +356,14 @@ export async function publishDraw(gameId: string) {
 /** RF34: ajuste manual — move um jogador para outro time. */
 export async function moveDrawPlayer(gameId: string, membershipId: string, toTeam: number) {
   return guarded(async () => {
-    const { game } = await requireGame(gameId);
+    const { game, patota } = await requireGame(gameId);
     await requireManager(game.patotaId);
     const draw = parseStoredDraw(game.draw);
     if (!draw) return { error: "Sorteie os times primeiro." };
 
     await db.game.update({ where: { id: gameId }, data: { draw: moveMember(draw, membershipId, toTeam) } });
     revalidatePath(`/patotas/${game.patotaId}/jogos/${gameId}`);
-    return { ok: true, message: `Jogador movido para o ${TEAM_NAMES[toTeam]}.` };
+    return { ok: true, message: `Jogador movido para ${teamName(toTeam, patota.teamNames)}.` };
   });
 }
 
@@ -412,7 +417,7 @@ const smallInt = (max: number) => (v: FormDataEntryValue | null) => {
 export async function saveGameResult(gameId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   return guarded(async () => {
     const { game } = await requireGame(gameId);
-    const { membership } = await requireManager(game.patotaId);
+    const { membership, patota } = await requireManager(game.patotaId);
     if (game.status === "CANCELLED") return { error: "Este jogo foi cancelado." };
     if (game.startsAt > new Date()) return { error: "O resultado só pode ser registrado depois que o jogo começar." };
 
@@ -448,7 +453,7 @@ export async function saveGameResult(gameId: string, _prev: ActionResult, formDa
     ]);
 
     const scoreText = teamScores.length
-      ? ` — ${teamScores.map((s, i) => `${TEAM_NAMES[i]} ${s}`).join(" × ")}`
+      ? ` — ${teamScores.map((s, i) => `${teamName(i, patota.teamNames)} ${s}`).join(" × ")}`
       : "";
     await logActivity({
       patotaId: game.patotaId,
