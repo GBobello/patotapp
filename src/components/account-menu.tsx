@@ -27,7 +27,7 @@ export function AccountMenu({ displayName, image }: Props) {
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <Avatar src={image ?? undefined} alt="" sx={{ width: 36, height: 36 }}>
+        <Avatar src={image ?? undefined} alt="" sx={{ width: 36, height: 36, bgcolor: "secondary.main", color: "secondary.contrastText" }}>
           {displayName.charAt(0).toUpperCase()}
         </Avatar>
       </IconButton>

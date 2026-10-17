@@ -32,9 +32,14 @@ export function NotificationsLink({ unread }: { unread: number }) {
   const label = unread ? `Notificações: ${unread} ${unread === 1 ? "nova" : "novas"}` : "Notificações";
   return (
     <IconButton component={NextLink} href="/notificacoes" color="inherit" aria-label={label}>
-      <Badge badgeContent={unread} color="error" max={99}>
+      {/* Sem notificações, nada de Badge: ao sumir ele ainda mostra o número antigo durante a animação. */}
+      {unread ? (
+        <Badge badgeContent={unread} color="error" max={99} slotProps={{ badge: { "aria-hidden": true } }}>
+          <NotificationsIcon />
+        </Badge>
+      ) : (
         <NotificationsIcon />
-      </Badge>
+      )}
     </IconButton>
   );
 }

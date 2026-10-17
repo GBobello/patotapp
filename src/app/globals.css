@@ -23,3 +23,37 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* Preferência "menos animação" escolhida no app (além da do sistema). */
+body.reduce-motion *,
+body.reduce-motion *::before,
+body.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Alto contraste (RF06): texto secundário vira primário, bordas e foco mais fortes. */
+body.high-contrast {
+  --mui-palette-text-secondary: var(--mui-palette-text-primary);
+  --mui-palette-divider: var(--mui-palette-text-primary);
+}
+.light body.high-contrast {
+  --mui-palette-primary-main: #0B4D24;
+  --mui-palette-background-default: #FFFFFF;
+}
+.dark body.high-contrast {
+  --mui-palette-primary-main: #B5F2C0;
+  --mui-palette-background-default: #000000;
+  --mui-palette-background-paper: #0A0A0A;
+}
+body.high-contrast .MuiOutlinedInput-notchedOutline,
+body.high-contrast .MuiPaper-outlined,
+body.high-contrast .MuiCard-root {
+  border-color: var(--mui-palette-text-primary) !important;
+  border-width: 2px;
+}
+body.high-contrast a {
+  text-decoration-thickness: 2px;
+}

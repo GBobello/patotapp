@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { POSITIONS, normalizeSecondaryPositions } from "@/domain/positions";
+import type { ActionResult } from "@/lib/forms";
 import { db } from "@/server/db";
 import { requireUser } from "@/server/session";
 
@@ -60,4 +62,37 @@ export async function updateProfile(_prev: ProfileState, formData: FormData): Pr
 
   revalidatePath("/", "layout");
   return { ok: true };
+}
+
+/**
+ * RF05 (LGPD): exclui a conta e os dados pessoais.
+ * Patotas em que a pessoa é a única integrante são apagadas junto; se ela for a última
+ * organizadora de uma patota com outras pessoas, precisa passar o papel antes (RN02).
+ */
+export async function deleteAccount(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser();
+  if (String(formData.get("confirm") ?? "").trim().toUpperCase() !== "EXCLUIR") {
+    return { fieldErrors: { confirm: 'Digite EXCLUIR para confirmar.' } };
+  }
+
+  const organizing = await db.membership.findMany({
+    where: { userId: user.id, role: "ORGANIZER" },
+    include: { patota: { include: { memberships: { select: { role: true } } } } },
+  });
+  const blocking = organizing.filter(
+    (m) => m.patota.memberships.length > 1 && m.patota.memberships.filter((x) => x.role === "ORGANIZER").length === 1,
+  );
+  if (blocking.length) {
+    return {
+      error: `Antes de excluir, promova outro organizador em: ${blocking.map((m) => m.patota.name).join(", ")}.`,
+    };
+  }
+
+  const alone = organizing.filter((m) => m.patota.memberships.length === 1).map((m) => m.patotaId);
+  await db.$transaction([
+    db.patota.deleteMany({ where: { id: { in: alone } } }),
+    db.user.delete({ where: { id: user.id } }),
+  ]);
+
+  redirect("/login?conta=excluida");
 }

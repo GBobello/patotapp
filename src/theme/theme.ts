@@ -50,6 +50,15 @@ const theme = createTheme({
       // Alvos de toque de no mínimo 48dp (Material / WCAG 2.5.5).
       styleOverrides: { root: { minHeight: 48, borderRadius: 24, paddingInline: 24 } },
     },
+    MuiAvatar: {
+      // O cinza padrão do MUI não atinge 4.5:1 no modo escuro.
+      styleOverrides: {
+        colorDefault: ({ theme }) => ({
+          backgroundColor: theme.vars.palette.primary.main,
+          color: theme.vars.palette.primary.contrastText,
+        }),
+      },
+    },
     MuiIconButton: {
       styleOverrides: { root: { minWidth: 48, minHeight: 48 } },
     },

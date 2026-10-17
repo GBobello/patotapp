@@ -24,7 +24,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
-  const { error, callbackUrl: rawCallback } = await searchParams;
+  const { error, callbackUrl: rawCallback, conta } = await searchParams;
   const callbackUrl = safeCallbackPath(rawCallback);
   if ((await auth())?.user) redirect(callbackUrl);
 
@@ -44,6 +44,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           </Box>
 
           {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
+          {conta === "excluida" && <Alert severity="success">Sua conta e seus dados foram excluídos.</Alert>}
 
           <EmailLoginForm callbackUrl={callbackUrl} />
 
