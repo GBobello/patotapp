@@ -69,22 +69,30 @@ model Patota {
   defaultTeamsCount    Int     @default(2)
   /// Quantas horas antes do jogo a confirmação fecha.
   defaultDeadlineHours Int     @default(3)
+  /// Prioridade dos mensalistas (RF19): diaristas só ocupam vagas X horas antes do jogo.
+  /// null = diaristas podem confirmar desde o início.
+  diaristaWindowHours  Int?
 
   memberships Membership[]
   games       Game[]
 }
 
-/// Vínculo de uma pessoa com uma patota. Papel e tipo são por patota.
+/// Vínculo de uma pessoa com uma patota. Papel, tipo e nota são por patota.
+/// Convidados sem conta (RF13) têm userId nulo e usam guestName/guestPosition.
 model Membership {
-  id        String     @id @default(cuid())
-  patotaId  String
-  userId    String
-  role      Role       @default(PLAYER)
-  type      MemberType @default(MENSALISTA)
-  createdAt DateTime   @default(now())
+  id            String     @id @default(cuid())
+  patotaId      String
+  userId        String?
+  role          Role       @default(PLAYER)
+  type          MemberType @default(MENSALISTA)
+  /// Nota de 1 a 5 usada no sorteio (RF26). Visível só para organizadores (RF27).
+  rating        Int        @default(3)
+  guestName     String?
+  guestPosition Position?
+  createdAt     DateTime   @default(now())
 
   patota      Patota       @relation(fields: [patotaId], references: [id], onDelete: Cascade)
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   attendances Attendance[]
 
   @@unique([patotaId, userId])
@@ -112,6 +120,8 @@ model Game {
   location             String?
   maxPlayers           Int
   teamsCount           Int        @default(2)
+  /// A partir de quando diaristas podem ocupar vagas (null = desde o início).
+  diaristasOpenAt      DateTime?
   /// Depois deste momento só organizadores alteram a lista (RN03).
   confirmationDeadline DateTime
   status               GameStatus @default(SCHEDULED)

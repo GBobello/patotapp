@@ -41,7 +41,3 @@ export async function requireOrganizer(patotaId: string) {
   return ctx;
 }
 
-/** Nome exibido nas listas: apelido > nome > e-mail. */
-export function displayName(user: { nickname: string | null; name: string | null; email: string }) {
-  return user.nickname || user.name || user.email.split("@")[0];
-}

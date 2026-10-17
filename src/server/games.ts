@@ -29,6 +29,11 @@ export async function withGameLock<T>(gameId: string, fn: (tx: Tx) => Promise<T>
   });
 }
 
+/** Reaplica as regras de vaga (ex.: a janela dos diaristas abriu desde a última mudança). */
+export async function syncGameSpots(gameId: string) {
+  return withGameLock(gameId, async () => {});
+}
+
 /** Promove quem está na lista de espera enquanto houver vagas (RF20). */
 async function fillSpots(tx: Tx, gameId: string) {
   const game = await tx.game.findUniqueOrThrow({
@@ -40,7 +45,7 @@ async function fillSpots(tx: Tx, gameId: string) {
   const ids = promotions({
     maxPlayers: game.maxPlayers,
     confirmedCount,
-    diaristasAllowed: true,
+    diaristasAllowed: !game.diaristasOpenAt || game.diaristasOpenAt <= new Date(),
     waitlist: game.attendances
       .filter((a) => a.status === "WAITLIST")
       .map((a) => ({

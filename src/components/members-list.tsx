@@ -13,6 +13,7 @@ import ListSubheader from "@mui/material/ListSubheader";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
+import Rating from "@mui/material/Rating";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
@@ -23,8 +24,10 @@ import {
   changeMemberRole,
   changeMemberType,
   removeMember,
+  setRating,
 } from "@/app/(app)/patotas/[id]/actions";
 import { POSITION_LABELS, type Position } from "@/domain/positions";
+import { RATING_LABELS } from "@/domain/members";
 import { MEMBER_TYPE_LABELS, ROLE_LABELS, ROLES, type MemberType, type Role } from "@/domain/roles";
 import { ConfirmDialog, useServerAction } from "./action-button";
 
@@ -36,6 +39,9 @@ export type MemberRow = {
   type: MemberType;
   primaryPosition: Position | null;
   isMe: boolean;
+  isGuest: boolean;
+  /** Só enviado para organizadores (RF27). */
+  rating?: number;
 };
 
 type Props = {
@@ -94,6 +100,7 @@ export function MembersList({ patotaId, members, canManage, isOrganizer }: Props
               {i > 0 && <Divider component="div" />}
               <ListItem
                 component="div"
+                sx={{ flexWrap: "wrap" }}
                 secondaryAction={
                   canManage && !m.isMe ? (
                     <MemberMenu patotaId={patotaId} member={m} isOrganizer={isOrganizer} />
@@ -110,6 +117,7 @@ export function MembersList({ patotaId, members, canManage, isOrganizer }: Props
                   secondary={
                     <Stack component="span" direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5, mt: 0.5 }}>
                       {m.role !== "PLAYER" && <Chip component="span" size="small" color="primary" label={ROLE_LABELS[m.role]} />}
+                      {m.isGuest && <Chip component="span" size="small" color="secondary" label="Convidado" />}
                       <Chip component="span" size="small" variant="outlined" label={MEMBER_TYPE_LABELS[m.type]} />
                       <Chip
                         component="span"
@@ -121,6 +129,9 @@ export function MembersList({ patotaId, members, canManage, isOrganizer }: Props
                   }
                   slotProps={{ secondary: { component: "div" } }}
                 />
+                {canManage && m.rating !== undefined && (
+                  <MemberRating patotaId={patotaId} member={m} />
+                )}
               </ListItem>
             </Stack>
           ))}
@@ -157,8 +168,9 @@ function MemberMenu({ patotaId, member, isOrganizer }: { patotaId: string; membe
         >
           Tornar {MEMBER_TYPE_LABELS[otherType].toLowerCase()}
         </MenuItem>
-        {isOrganizer && <ListSubheader>Papel</ListSubheader>}
+        {isOrganizer && !member.isGuest && <ListSubheader>Papel</ListSubheader>}
         {isOrganizer &&
+          !member.isGuest &&
           ROLES.filter((r) => r !== member.role).map((r) => (
             <MenuItem
               key={r}
@@ -197,5 +209,35 @@ function MemberMenu({ patotaId, member, isOrganizer }: { patotaId: string; membe
         }}
       />
     </>
+  );
+}
+
+/** Nota de 1 a 5 (RF26) — salva ao escolher. O MUI Rating é um grupo de rádios acessível. */
+function MemberRating({ patotaId, member }: { patotaId: string; member: MemberRow }) {
+  const [value, setValue] = useState(member.rating ?? 3);
+  const { run, pending } = useServerAction();
+
+  return (
+    <Stack
+      direction={{ xs: "row", sm: "column" }}
+      spacing={{ xs: 1, sm: 0 }}
+      sx={{ alignItems: "center", mr: { sm: 6 }, ml: { xs: 7, sm: 0 }, width: { xs: "100%", sm: "auto" } }}
+    >
+      <Rating
+        name={`nota-${member.id}`}
+        value={value}
+        disabled={pending}
+        getLabelText={(v) => `${v} de 5 — ${RATING_LABELS[v]}`}
+        onChange={(_, v) => {
+          if (!v) return;
+          setValue(v);
+          run(() => setRating(patotaId, member.id, v));
+        }}
+        aria-label={`Nota de ${member.name}`}
+      />
+      <Typography variant="caption" color="text.secondary">
+        {RATING_LABELS[value]}
+      </Typography>
+    </Stack>
   );
 }

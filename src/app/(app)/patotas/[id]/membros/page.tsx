@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Stack from "@mui/material/Stack";
 import { ActionButton } from "@/components/action-button";
+import { AddGuestDialog } from "@/components/add-guest-dialog";
 import { MembersList, type MemberRow } from "@/components/members-list";
+import { memberImage, memberName, memberPositions } from "@/domain/members";
 import { canManage, isOrganizer } from "@/domain/roles";
 import { db } from "@/server/db";
-import { displayName, requireMember } from "@/server/patotas";
+import { requireMember } from "@/server/patotas";
 import { leavePatota } from "../actions";
 
 export const metadata: Metadata = { title: "Integrantes" };
@@ -14,6 +16,7 @@ const ROLE_ORDER = { ORGANIZER: 0, CO_ORGANIZER: 1, PLAYER: 2 } as const;
 export default async function MembersPage({ params }: PageProps<"/patotas/[id]/membros">) {
   const { id } = await params;
   const { membership: me } = await requireMember(id);
+  const manager = canManage(me.role);
 
   const memberships = await db.membership.findMany({
     where: { patotaId: id },
@@ -23,23 +26,26 @@ export default async function MembersPage({ params }: PageProps<"/patotas/[id]/m
   const rows: MemberRow[] = memberships
     .map((m) => ({
       id: m.id,
-      name: displayName(m.user),
-      image: m.user.image,
+      name: memberName(m),
+      image: memberImage(m),
       role: m.role,
       type: m.type,
-      primaryPosition: m.user.primaryPosition,
+      primaryPosition: memberPositions(m).primary,
       isMe: m.id === me.id,
+      isGuest: !m.userId,
+      // RF27: a nota não sai do servidor para quem não é organizador.
+      rating: manager ? m.rating : undefined,
     }))
     .sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || a.name.localeCompare(b.name, "pt-BR"));
 
   return (
     <Stack spacing={3}>
-      <MembersList
-        patotaId={id}
-        members={rows}
-        canManage={canManage(me.role)}
-        isOrganizer={isOrganizer(me.role)}
-      />
+      {manager && (
+        <Stack direction="row" sx={{ justifyContent: "flex-end" }}>
+          <AddGuestDialog patotaId={id} />
+        </Stack>
+      )}
+      <MembersList patotaId={id} members={rows} canManage={manager} isOrganizer={isOrganizer(me.role)} />
       <ActionButton
         action={leavePatota.bind(null, id)}
         color="error"

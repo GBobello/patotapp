@@ -12,10 +12,10 @@ import { CopyButton, WhatsAppButton } from "@/components/share-buttons";
 import type { AttendanceStatus } from "@/domain/attendance";
 import { formatGameDate, formatGameDateLong } from "@/domain/dates";
 import { canManage } from "@/domain/roles";
+import { memberImage, memberName, memberPositions } from "@/domain/members";
 import { gameListMessage } from "@/domain/share";
 import { db } from "@/server/db";
-import { requireGame } from "@/server/games";
-import { displayName } from "@/server/patotas";
+import { requireGame, syncGameSpots } from "@/server/games";
 import { getOrigin } from "@/server/url";
 import { cancelGame } from "../actions";
 
@@ -29,6 +29,8 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
   const { game, membership: me, patota } = await requireGame(gameId);
   if (game.patotaId !== id) notFound();
   const manager = canManage(me.role);
+  const diaristaWindowOpen = !game.diaristasOpenAt || game.diaristasOpenAt <= new Date();
+  if (game.status === "SCHEDULED" && game.diaristasOpenAt) await syncGameSpots(gameId);
 
   const [attendances, members] = await Promise.all([
     db.attendance.findMany({
@@ -42,13 +44,13 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
   const byStatus = (s: AttendanceStatus) => attendances.filter((a) => a.status === s);
   const toItem = (m: (typeof members)[number], status: AttendanceStatus | null): PlayerItem => ({
     key: m.id,
-    name: displayName(m.user),
+    name: memberName(m),
     isMe: m.id === me.id,
-    image: m.user.image,
-    position: m.user.primaryPosition,
-    detail: m.type === "DIARISTA" ? "Diarista" : undefined,
+    image: memberImage(m),
+    position: memberPositions(m).primary,
+    detail: [m.user ? null : "Convidado", m.type === "DIARISTA" ? "Diarista" : null].filter(Boolean).join(" · ") || undefined,
     action: manager ? (
-      <AttendanceAdminMenu gameId={gameId} membershipId={m.id} name={displayName(m.user)} current={status} />
+      <AttendanceAdminMenu gameId={gameId} membershipId={m.id} name={memberName(m)} current={status} />
     ) : undefined,
   });
   const items = (s: AttendanceStatus) => byStatus(s).map((a) => toItem(a.membership, a.status));
@@ -56,7 +58,7 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
   const responded = new Set(attendances.map((a) => a.membershipId));
   const noAnswer = members
     .filter((m) => !responded.has(m.id))
-    .sort((a, b) => displayName(a.user).localeCompare(displayName(b.user), "pt-BR"))
+    .sort((a, b) => memberName(a).localeCompare(memberName(b), "pt-BR"))
     .map((m) => toItem(m, null));
 
   const myStatus = attendances.find((a) => a.membershipId === me.id)?.status ?? null;
@@ -90,6 +92,11 @@ export default async function GamePage({ params }: PageProps<"/patotas/[id]/jogo
 
       {cancelled && <Alert severity="error">Este jogo foi cancelado.</Alert>}
       {game.notes && <Alert severity="info">{game.notes}</Alert>}
+      {!cancelled && !diaristaWindowOpen && (
+        <Alert severity="info">
+          Mensalistas têm prioridade. Vagas para diaristas abrem {formatGameDate(game.diaristasOpenAt!)}.
+        </Alert>
+      )}
 
       {!cancelled && (
         <Paper variant="outlined" sx={{ p: 2 }}>

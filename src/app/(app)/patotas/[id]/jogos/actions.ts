@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { RESPONSES, checkCanRespond, initialStatus } from "@/domain/attendance";
-import { fromLocalDateTime, toLocalParts } from "@/domain/dates";
+import { formatGameDate, fromLocalDateTime, toLocalParts } from "@/domain/dates";
 import { canManage } from "@/domain/roles";
 import { type ActionResult, emptyToNull, fieldErrorsFrom, formValues } from "@/lib/forms";
 import { db } from "@/server/db";
@@ -58,8 +58,17 @@ export async function createGame(patotaId: string, _prev: ActionResult, formData
       return { fieldErrors: { date: "A data do jogo já passou." }, values: formValues(formData) };
     }
 
+    const patota = await db.patota.findUniqueOrThrow({ where: { id: patotaId } });
     const game = await db.game.create({
-      data: { ...data, patotaId, startsAt, confirmationDeadline: new Date(startsAt.getTime() - deadlineHours * HOUR) },
+      data: {
+        ...data,
+        patotaId,
+        startsAt,
+        confirmationDeadline: new Date(startsAt.getTime() - deadlineHours * HOUR),
+        // RF19: mensalistas têm prioridade até X horas antes do jogo.
+        diaristasOpenAt:
+          patota.diaristaWindowHours === null ? null : new Date(startsAt.getTime() - patota.diaristaWindowHours * HOUR),
+      },
     });
 
     if (saveAsDefault) {
@@ -109,9 +118,13 @@ export async function respond(gameId: string, wanted: string) {
     });
     refreshPatota(game.patotaId);
 
+    const waitingWindow =
+      mine.status === "WAITLIST" && membership.type === "DIARISTA" && game.diaristasOpenAt && game.diaristasOpenAt > new Date();
     const messages = {
       CONFIRMED: "Presença confirmada. Bom jogo!",
-      WAITLIST: "Vagas esgotadas: você entrou na lista de espera e será promovido se abrir vaga.",
+      WAITLIST: waitingWindow
+        ? `Mensalistas têm prioridade até ${formatGameDate(game.diaristasOpenAt!)}. Você está na lista de espera.`
+        : "Vagas esgotadas: você entrou na lista de espera e será promovido se abrir vaga.",
       MAYBE: "Marcado como talvez. Confirme assim que souber!",
       DECLINED: "Tudo bem, fica para a próxima.",
     } as const;
