@@ -6,11 +6,12 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import { loginWithEmail, type LoginState } from "./actions";
 
-export function EmailLoginForm() {
+export function EmailLoginForm({ callbackUrl }: { callbackUrl: string }) {
   const [state, formAction, pending] = useActionState<LoginState, FormData>(loginWithEmail, {});
 
   return (
     <Stack component="form" action={formAction} spacing={2} noValidate>
+      <input type="hidden" name="callbackUrl" value={callbackUrl} />
       <TextField
         name="email"
         type="email"

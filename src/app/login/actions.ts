@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { signIn } from "@/auth";
+import { safeCallbackPath } from "@/lib/forms";
 
 export type LoginState = { error?: string; email?: string };
 
@@ -16,10 +17,10 @@ export async function loginWithEmail(_prev: LoginState, formData: FormData): Pro
   }
 
   // Envia o link mágico e redireciona para /login/verificar.
-  await signIn("resend", { email: parsed.data, redirectTo: "/" });
+  await signIn("resend", { email: parsed.data, redirectTo: safeCallbackPath(formData.get("callbackUrl")) });
   return {};
 }
 
-export async function loginWithGoogle() {
-  await signIn("google", { redirectTo: "/" });
+export async function loginWithGoogle(formData: FormData) {
+  await signIn("google", { redirectTo: safeCallbackPath(formData.get("callbackUrl")) });
 }

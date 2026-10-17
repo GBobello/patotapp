@@ -32,8 +32,51 @@ model User {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
-  accounts Account[]
-  sessions Session[]
+  accounts    Account[]
+  sessions    Session[]
+  memberships Membership[]
+}
+
+// ---- Patotas (ciclo 2) ----
+
+enum Role {
+  ORGANIZER
+  CO_ORGANIZER
+  PLAYER
+}
+
+enum MemberType {
+  MENSALISTA
+  DIARISTA
+}
+
+model Patota {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  location    String?
+  /// Código usado no link de convite (/convite/<codigo>).
+  inviteCode  String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships Membership[]
+}
+
+/// Vínculo de uma pessoa com uma patota. Papel e tipo são por patota.
+model Membership {
+  id        String     @id @default(cuid())
+  patotaId  String
+  userId    String
+  role      Role       @default(PLAYER)
+  type      MemberType @default(MENSALISTA)
+  createdAt DateTime   @default(now())
+
+  patota Patota @relation(fields: [patotaId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([patotaId, userId])
+  @@index([userId])
 }
 
 // ---- Modelos do Auth.js (@auth/prisma-adapter) ----

@@ -10,6 +10,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import SportsSoccerIcon from "@mui/icons-material/SportsSoccer";
 import { auth, googleEnabled } from "@/auth";
+import { safeCallbackPath } from "@/lib/forms";
 import { loginWithGoogle } from "./actions";
 import { EmailLoginForm } from "./email-login-form";
 
@@ -23,9 +24,10 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
-  if ((await auth())?.user) redirect("/");
+  const { error, callbackUrl: rawCallback } = await searchParams;
+  const callbackUrl = safeCallbackPath(rawCallback);
+  if ((await auth())?.user) redirect(callbackUrl);
 
-  const { error } = await searchParams;
   const errorMessage =
     typeof error === "string" ? (ERROR_MESSAGES[error] ?? "Não foi possível entrar. Tente novamente.") : null;
 
@@ -43,12 +45,13 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
           {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
 
-          <EmailLoginForm />
+          <EmailLoginForm callbackUrl={callbackUrl} />
 
           {googleEnabled && (
             <>
               <Divider>ou</Divider>
               <form action={loginWithGoogle}>
+                <input type="hidden" name="callbackUrl" value={callbackUrl} />
                 <Button type="submit" variant="outlined" size="large" fullWidth>
                   Entrar com Google
                 </Button>
